@@ -1,0 +1,32 @@
+# Caches & System
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env*
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Local testing, temp data & databases
+scratch/
+*.bak
+*.tmp
+*.log
+*.sqlite
+*.sqlite3
+*.db
+data/
+*.local.json
+
+# User personal data, exports & timesheet backups
+*.json_backup
+shiftly_backup_*.json
+Stundenzettel_*.csv
+Stundenzettel_*.pdf
+*.csv
+*.pdf

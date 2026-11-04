@@ -1,0 +1,63 @@
+"""
+Local Development Server for Shiftly PWA.
+Serves static files directly from D:\\Dev\\Shiftly using Python 3.12 built-in http.server.
+Displays both localhost and LAN IP so you can test and install the PWA on your phone in your Wi-Fi.
+"""
+
+import http.server
+import os
+import socket
+import socketserver
+import sys
+import webbrowser
+from pathlib import Path
+
+PORT = 8080
+DIRECTORY = Path(__file__).resolve().parent
+
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(DIRECTORY), **kwargs)
+
+    def end_headers(self):
+        # Enable CORS and disable cache during local development
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        super().end_headers()
+
+
+def main():
+    os.chdir(str(DIRECTORY))
+    lan_ip = get_local_ip()
+
+    print("=" * 60)
+    print(" 🚀 Shiftly PWA Local Dev Server")
+    print("=" * 60)
+    print(f" • PC Browser:  http://localhost:{PORT}")
+    print(f" • Handy (WLAN): http://{lan_ip}:{PORT}")
+    print("=" * 60)
+    print(" Drücke Strg+C zum Beenden.")
+
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nServer beendet.")
+
+
+if __name__ == "__main__":
+    main()
+

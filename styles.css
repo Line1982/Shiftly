@@ -1,0 +1,640 @@
+/* ==========================================================================
+   Shiftly - Standalone Mobile PWA Styles
+   Design: Modern Clean Mobile UI (Safe Areas, Touch-Optimized, Google/Linear Style)
+   Print: Clean DIN A4 Timesheet Layout for Employer & Records
+   ========================================================================== */
+
+:root {
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-card: #1e293b;
+  --bg-card-hover: #334155;
+  --bg-input: #0f172a;
+
+  --border-subtle: #334155;
+  --border-medium: #475569;
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  --primary: #38bdf8;
+  --primary-hover: #0284c7;
+  --primary-glow: rgba(56, 189, 248, 0.2);
+
+  --accent-emerald: #10b981;
+  --accent-rose: #f43f5e;
+  --accent-amber: #f59e0b;
+  --accent-purple: #a855f7;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-stack);
+  background-color: var(--bg-base);
+  color: var(--text-main);
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: calc(75px + env(safe-area-inset-bottom, 0px));
+  user-select: none;
+}
+
+/* App Header */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background-color: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.75rem 1rem;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-icon {
+  font-size: 1.3rem;
+}
+
+.brand-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.badge-offline {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+/* Flexible Period & Preset Filter */
+.period-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  padding: 0.6rem;
+  border: 1px solid var(--border-subtle);
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.custom-dates-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.date-filter-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.date-input-compact {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+/* Content Container */
+.main-content {
+  flex: 1;
+  padding: 1rem;
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+/* KPI Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.kpi-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+}
+
+.kpi-card.span-2 {
+  grid-column: span 2;
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.kpi-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.kpi-subtext {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+}
+
+.text-rose { color: var(--accent-rose) !important; }
+.text-emerald { color: var(--accent-emerald) !important; }
+
+/* Weekly Breakdown */
+.weekly-breakdown-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.weekly-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.weekly-row:last-child {
+  border-bottom: none;
+}
+
+/* Entry / Shift Cards */
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.65rem;
+}
+
+.shifts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.shift-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+}
+
+.shift-card.card-vacation {
+  border-left: 4px solid var(--accent-purple);
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-full);
+}
+
+.badge-work {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--primary);
+}
+
+.badge-vacation {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple);
+}
+
+.shift-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.shift-date {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.shift-earnings {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--primary);
+}
+
+.shift-card-details {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.shift-note {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.4rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.shift-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 0.4rem;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  background-color: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-subtle);
+}
+
+/* Floating Action Button (FAB) */
+.fab-container {
+  position: fixed;
+  right: 1.25rem;
+  bottom: calc(75px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-end;
+  z-index: 50;
+}
+
+.fab-small {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-full);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.fab-main {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background-color: var(--primary);
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--primary-glow);
+  transition: transform 0.15s ease;
+}
+
+.fab-main:active, .fab-small:active {
+  transform: scale(0.92);
+}
+
+/* Bottom Navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-around;
+  padding: 0.4rem 0 calc(0.4rem + env(safe-area-inset-bottom, 0px)) 0;
+  z-index: 60;
+}
+
+.bottom-nav-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  flex: 1;
+}
+
+.bottom-nav-btn.active {
+  color: var(--primary);
+}
+
+.nav-icon {
+  font-size: 1.25rem;
+}
+
+/* Modals */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: flex-end;
+  z-index: 100;
+}
+
+.modal.open {
+  display: flex;
+}
+
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.modal-sheet {
+  position: relative;
+  background-color: var(--bg-surface);
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  padding: 1.25rem;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+/* Radio segment toggle (Work vs Vacation) */
+.segment-toggle {
+  display: flex;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border-medium);
+}
+
+.segment-toggle label {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.segment-toggle input[type="radio"] {
+  display: none;
+}
+
+.segment-toggle input[type="radio"]:checked + span {
+  background: var(--primary);
+  color: #0f172a;
+}
+
+.segment-label-content {
+  display: block;
+  padding: 0.4rem;
+  border-radius: var(--radius-xs);
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 0.9rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.form-control {
+  width: 100%;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+  outline: none;
+  font-family: inherit;
+}
+
+.form-control:focus {
+  border-color: var(--primary);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.9rem;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn:active {
+  opacity: 0.8;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: #0f172a;
+}
+
+.btn-secondary {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.btn-sm {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* ==========================================================================
+   PRINT STYLESHEET (Official DIN A4 Timesheet Layout)
+   ========================================================================== */
+
+#printTimesheetSection {
+  display: none;
+}
+
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .app-header,
+  .main-content,
+  .bottom-nav,
+  .fab-container,
+  .modal {
+    display: none !important;
+  }
+
+  #printTimesheetSection {
+    display: block !important;
+    padding: 1.5cm;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    color: #000;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-size: 10pt;
+  }
+
+  .print-table th,
+  .print-table td {
+    border: 1px solid #777;
+    padding: 6px 8px;
+  }
+
+  .print-table th {
+    background-color: #f0f0f0;
+    text-align: left;
+    font-weight: bold;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 1cm;
+  }
+}
