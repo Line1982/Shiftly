@@ -550,11 +550,13 @@ class ShiftlyApp {
     const vacFields = document.getElementById('modalVacationFields');
     const vacSingleBox = document.getElementById('vacSingleEditBox');
     const vacPlannerBox = document.getElementById('vacPlannerBox');
+    const noteRow = document.getElementById('entryNoteRow');
 
     if (workFields) workFields.hidden = this.entryType !== 'work';
     if (vacFields) vacFields.hidden = this.entryType !== 'vacation';
     if (vacSingleBox) vacSingleBox.hidden = !isSingleVacEdit;
     if (vacPlannerBox) vacPlannerBox.hidden = !isPlannerMode;
+    if (noteRow) noteRow.hidden = this.entryType === 'vacation';
 
     if (isPlannerMode) {
       this.renderVacationPlanner();
@@ -659,7 +661,7 @@ class ShiftlyApp {
     const firstDayObj = new Date(this.vacCalYear, this.vacCalMonth, 1);
     const daysInMonth = new Date(this.vacCalYear, this.vacCalMonth + 1, 0).getDate();
     if (labelEl) {
-      labelEl.textContent = firstDayObj.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });
+      labelEl.textContent = firstDayObj.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
     }
 
     // Update Auto Preset Pill label (e.g. 2.4h for 12h/week)
@@ -679,6 +681,22 @@ class ShiftlyApp {
       if (r.type === 'vacation' && r.date) {
         savedVacMap.set(r.date, Number(r.net_hours) || 0);
       }
+    }
+
+    // Live-update remaining vacation badge for the displayed calendar year (including active selection)
+    const vacHintEl = document.getElementById('vacationRemainingHint');
+    if (vacHintEl) {
+      const yearPrefix = `${this.vacCalYear}-`;
+      const totalVacDays = Number(this.config.totalVacationDays) || 20;
+      const usedSet = new Set();
+      for (const dateKey of savedVacMap.keys()) {
+        if (dateKey.startsWith(yearPrefix)) usedSet.add(dateKey);
+      }
+      for (const dateKey of this.vacSelectedDays.keys()) {
+        if (dateKey.startsWith(yearPrefix)) usedSet.add(dateKey);
+      }
+      const remaining = Math.max(0, totalVacDays - usedSet.size);
+      vacHintEl.textContent = `${remaining} / ${totalVacDays} T. frei`;
     }
 
     let cellsHtml = '';
@@ -731,6 +749,7 @@ class ShiftlyApp {
     });
 
     // Update Tactile Hours Hero Card state
+    const eyebrowEl = document.getElementById('vacHoursEyebrow');
     const targetTitleEl = document.getElementById('vacActiveDayLabel');
     const applyAllBtn = document.getElementById('btnVacApplyAll');
     const heroInput = document.getElementById('vacDefaultHoursInput');
@@ -742,17 +761,21 @@ class ShiftlyApp {
       if (heroInput) heroInput.value = currentHeroHours;
       const dObj = new Date(this.vacActiveDay + 'T00:00:00');
       const dLabel = isNaN(dObj) ? this.vacActiveDay : dateFormatter.format(dObj);
+      if (eyebrowEl) {
+        eyebrowEl.textContent = this.vacSelectedDays.size > 1 ? 'Tag (Tippen = abwählen)' : 'Gewählter Tag';
+      }
       if (targetTitleEl) {
-        targetTitleEl.textContent = this.vacSelectedDays.size > 1
-          ? `${dLabel} (Nochmal tippen = abwählen)`
-          : dLabel;
+        targetTitleEl.textContent = dLabel;
       }
       if (applyAllBtn) applyAllBtn.hidden = this.vacSelectedDays.size <= 1;
     } else {
+      if (eyebrowEl) {
+        eyebrowEl.textContent = 'Stunden pro Tag';
+      }
       if (targetTitleEl) {
         targetTitleEl.textContent = this.vacSelectedDays.size > 0
-          ? `Alle ${this.vacSelectedDays.size} gewählten Tage`
-          : 'Standard für neue Urlaubstage';
+          ? `Alle ${this.vacSelectedDays.size} Tage`
+          : 'Standard-Urlaubstag';
       }
       if (applyAllBtn) applyAllBtn.hidden = true;
     }
@@ -878,7 +901,7 @@ class ShiftlyApp {
 
     try {
       const noteInput = document.getElementById('entryNote');
-      const note = (noteInput?.value || '').trim();
+      const note = this.entryType === 'vacation' ? '' : (noteInput?.value || '').trim();
 
       // Multi-Day Vacation Planner Batch Save
       if (this.entryType === 'vacation' && !this.editingRecordId) {

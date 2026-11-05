@@ -4,7 +4,7 @@
  * and falls back seamlessly to IndexedDB + Cache when offline.
  */
 
-const CACHE_NAME = 'shiftly-cache-v4.5.2';
+const CACHE_NAME = 'shiftly-cache-v4.5.4';
 
 const ASSETS_TO_CACHE = [
   './',
