@@ -42,6 +42,7 @@ class ShiftlyApp {
     this.historySubView = 'list'; // 'list' | 'weeks'
     this.entryType = 'work'; // 'work' | 'vacation'
     this.editingRecordId = null;
+    this.isSubmitting = false;
 
     // Vacation Calendar & Range Planner State
     this.vacCalYear = now.getFullYear();
@@ -201,6 +202,16 @@ class ShiftlyApp {
     }
     if (entryDateInput) {
       entryDateInput.addEventListener('change', () => this.updateEntryDateDisplay());
+      entryDateInput.addEventListener('input', () => this.updateEntryDateDisplay());
+      entryDateInput.addEventListener('click', () => {
+        if (typeof entryDateInput.showPicker === 'function') {
+          try {
+            entryDateInput.showPicker();
+          } catch (_) {
+            // Ignore if picker is already open or restricted by user-gesture policy
+          }
+        }
+      });
     }
 
     // Vacation Calendar Month Steppers & Controls
@@ -340,10 +351,17 @@ class ShiftlyApp {
       });
     }
 
-    // Submit Entry Form
+    // Submit Entry Form & Direct Button Trigger Fallback
     const entryForm = document.getElementById('entryForm');
+    const btnSubmitEntry = document.getElementById('btnSubmitEntry');
     if (entryForm) {
       entryForm.addEventListener('submit', (e) => this.handleEntrySubmit(e));
+    }
+    if (btnSubmitEntry) {
+      btnSubmitEntry.addEventListener('click', (e) => {
+        // Fallback for mobile browsers where form submission may be intercepted
+        this.handleEntrySubmit(e);
+      });
     }
 
     // Tab 2 (History): Month Steppers & Custom Date Drawer
@@ -854,84 +872,101 @@ class ShiftlyApp {
   }
 
   async handleEntrySubmit(e) {
-    e.preventDefault();
-    const note = (document.getElementById('entryNote').value || '').trim();
+    if (e) e.preventDefault();
+    if (this.isSubmitting) return;
+    this.isSubmitting = true;
 
-    // Multi-Day Vacation Planner Batch Save
-    if (this.entryType === 'vacation' && !this.editingRecordId) {
-      if (this.vacSelectedDays.size === 0) {
-        this.showToast('⚠️ Bitte mindestens einen Urlaubstag im Kalender antippen');
+    try {
+      const noteInput = document.getElementById('entryNote');
+      const note = (noteInput?.value || '').trim();
+
+      // Multi-Day Vacation Planner Batch Save
+      if (this.entryType === 'vacation' && !this.editingRecordId) {
+        if (this.vacSelectedDays.size === 0) {
+          this.showToast('⚠️ Bitte mindestens einen Urlaubstag im Kalender antippen');
+          return;
+        }
+
+        const sortedDates = Array.from(this.vacSelectedDays.keys()).sort();
+        let totalSavedHours = 0;
+
+        for (const isoDate of sortedDates) {
+          const netHours = Number(this.vacSelectedDays.get(isoDate)) || 0;
+          totalSavedHours += netHours;
+
+          // Overwrite existing vacation record on the same date if present
+          const existingVac = this.records.find(r => r.type === 'vacation' && r.date === isoDate);
+          const vacRecord = {
+            type: 'vacation',
+            date: isoDate,
+            year_month: isoDate.substring(0, 7),
+            start_time: '',
+            end_time: '',
+            break_minutes: 0,
+            net_hours: netHours,
+            note
+          };
+          if (existingVac && existingVac.id) {
+            vacRecord.id = existingVac.id;
+          }
+          await db.saveRecord(vacRecord);
+        }
+
+        const count = sortedDates.length;
+        await this.loadRecords();
+        this.vacSelectedDays.clear();
+        this.vacActiveDay = null;
+        if (noteInput) noteInput.value = '';
+        this.render();
+        this.renderVacationPlanner();
+        this.updateEntryLiveButton();
+        this.showToast(`🌴 ${count} Urlaubstag${count === 1 ? '' : 'e'} (${TimeEngine.formatHoursPretty(totalSavedHours)}) gespeichert`);
         return;
       }
 
-      const sortedDates = Array.from(this.vacSelectedDays.keys()).sort();
-      let totalSavedHours = 0;
+      const dateInput = document.getElementById('entryDate');
+      const date = (dateInput && dateInput.value) ? dateInput.value : toLocalIsoDate(new Date());
+      let netHours = 0;
+      let startTime = '';
+      let endTime = '';
+      let breakMinutes = 0;
 
-      for (const isoDate of sortedDates) {
-        const netHours = Number(this.vacSelectedDays.get(isoDate)) || 0;
-        totalSavedHours += netHours;
-
-        // Overwrite existing vacation record on the same date if present
-        const existingVac = this.records.find(r => r.type === 'vacation' && r.date === isoDate);
-        await db.saveRecord({
-          id: existingVac ? existingVac.id : undefined,
-          type: 'vacation',
-          date: isoDate,
-          year_month: isoDate.substring(0, 7),
-          start_time: '',
-          end_time: '',
-          break_minutes: 0,
-          net_hours: netHours,
-          note
-        });
+      if (this.entryType === 'vacation') {
+        netHours = Number(document.getElementById('vacationPaidHours')?.value) || 0;
+      } else {
+        startTime = document.getElementById('shiftStart')?.value || '08:00';
+        endTime = document.getElementById('shiftEnd')?.value || '12:00';
+        breakMinutes = Number(document.getElementById('shiftBreak')?.value) || 0;
+        netHours = TimeEngine.calculateNetHours(startTime, endTime, breakMinutes);
       }
 
-      const count = sortedDates.length;
+      const isEdit = Boolean(this.editingRecordId);
+
+      const recordData = {
+        type: this.entryType,
+        date,
+        year_month: date.substring(0, 7),
+        start_time: startTime,
+        end_time: endTime,
+        break_minutes: breakMinutes,
+        net_hours: netHours,
+        note
+      };
+      if (this.editingRecordId) {
+        recordData.id = this.editingRecordId;
+      }
+
+      await db.saveRecord(recordData);
       await this.loadRecords();
-      this.vacSelectedDays.clear();
-      this.vacActiveDay = null;
-      if (document.getElementById('entryNote')) document.getElementById('entryNote').value = '';
+      this.resetEntryFormToDefaults();
       this.render();
-      this.renderVacationPlanner();
-      this.updateEntryLiveButton();
-      this.showToast(`🌴 ${count} Urlaubstag${count === 1 ? '' : 'e'} (${TimeEngine.formatHoursPretty(totalSavedHours)}) gespeichert`);
-      return;
+      this.showToast(isEdit ? '✓ Änderungen gespeichert' : `✓ ${TimeEngine.formatHoursPretty(netHours)} eingetragen`);
+    } catch (err) {
+      console.error('Save failed:', err);
+      this.showToast('⚠️ Fehler beim Speichern: ' + (err.message || 'Unbekannter Fehler'));
+    } finally {
+      this.isSubmitting = false;
     }
-
-    const date = document.getElementById('entryDate').value;
-    let netHours = 0;
-    let startTime = '';
-    let endTime = '';
-    let breakMinutes = 0;
-
-    if (this.entryType === 'vacation') {
-      netHours = Number(document.getElementById('vacationPaidHours').value) || 0;
-    } else {
-      startTime = document.getElementById('shiftStart').value;
-      endTime = document.getElementById('shiftEnd').value;
-      breakMinutes = Number(document.getElementById('shiftBreak').value) || 0;
-      netHours = TimeEngine.calculateNetHours(startTime, endTime, breakMinutes);
-    }
-
-    const isEdit = Boolean(this.editingRecordId);
-
-    const recordData = {
-      id: this.editingRecordId || undefined,
-      type: this.entryType,
-      date,
-      year_month: date.substring(0, 7),
-      start_time: startTime,
-      end_time: endTime,
-      break_minutes: breakMinutes,
-      net_hours: netHours,
-      note
-    };
-
-    await db.saveRecord(recordData);
-    await this.loadRecords();
-    this.resetEntryFormToDefaults();
-    this.render();
-    this.showToast(isEdit ? '✓ Änderungen gespeichert' : `✓ ${TimeEngine.formatHoursPretty(netHours)} eingetragen`);
   }
 
   toggleCustomDateDrawer(forceState) {
@@ -1325,4 +1360,8 @@ function escapeHtml(str) {
 
 export const app = new ShiftlyApp();
 window.app = app;
-window.addEventListener('DOMContentLoaded', () => app.init());
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', () => app.init());
+} else {
+  app.init();
+}

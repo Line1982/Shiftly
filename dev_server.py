@@ -7,9 +7,7 @@ Displays both localhost and LAN IP so you can test and install the PWA on your p
 import http.server
 import os
 import socket
-import socketserver
 import sys
-import webbrowser
 from pathlib import Path
 
 PORT = 8080
@@ -18,12 +16,10 @@ DIRECTORY = Path(__file__).resolve().parent
 
 def get_local_ip():
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
         return "127.0.0.1"
 
 

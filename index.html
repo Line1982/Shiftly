@@ -19,7 +19,7 @@
   <link rel="icon" type="image/png" href="assets/icon-192.png?v=4.4.0">
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico?v=4.4.0">
 
-  <link rel="stylesheet" href="styles.css?v=4.5.0">
+  <link rel="stylesheet" href="styles.css?v=4.5.2">
 </head>
 <body>
 
@@ -56,7 +56,7 @@
           </div>
 
           <!-- Central Direct Entry Card (Fills the screen harmoniously) -->
-          <form class="entry-card" id="entryForm">
+          <form class="entry-card" id="entryForm" novalidate>
 
             <!-- Edit Mode Banner (Only visible when editing an existing entry) -->
             <div class="edit-banner" id="editModeBanner" hidden>
@@ -70,7 +70,7 @@
                 <button type="button" class="date-step-btn" id="btnDatePrev" aria-label="Ein Tag zurück">‹</button>
                 <div class="date-display-wrap" title="Datum wählen">
                   <span class="date-display-label" id="entryDateDisplay">Do., 05.11.</span>
-                  <input type="date" class="date-input-overlay" id="entryDate" lang="de-DE" required>
+                  <input type="date" class="date-input-overlay" id="entryDate" lang="de-DE">
                 </div>
                 <button type="button" class="date-step-btn" id="btnDateNext" aria-label="Ein Tag vor">›</button>
                 <button type="button" class="date-today-btn" id="btnDateToday">Heute</button>
@@ -162,21 +162,13 @@
                 <div class="vac-hours-hero-card">
                   <div class="vac-hours-hero-top">
                     <div class="vac-hours-target-info">
-                      <span class="vac-hours-eyebrow">STUNDEN FESTLEGEN FÜR</span>
+                      <span class="vac-hours-eyebrow">Stunden für</span>
                       <strong class="vac-hours-target-title" id="vacActiveDayLabel">Alle gewählten Tage</strong>
                     </div>
                     <button type="button" class="vac-apply-all-btn" id="btnVacApplyAll" hidden>Für alle übernehmen</button>
                   </div>
 
                   <div class="vac-hours-hero-controls">
-                    <div class="vac-presets-group" id="vacQuickPresetGroup">
-                      <button type="button" class="vac-preset-pill" data-vac-preset="auto" id="btnVacPresetAuto">2.4h</button>
-                      <button type="button" class="vac-preset-pill" data-vac-preset="3">3h</button>
-                      <button type="button" class="vac-preset-pill" data-vac-preset="4">4h</button>
-                      <button type="button" class="vac-preset-pill" data-vac-preset="6">6h</button>
-                      <button type="button" class="vac-preset-pill" data-vac-preset="8">8h</button>
-                    </div>
-
                     <div class="vac-big-stepper">
                       <button type="button" class="vac-hero-step-btn" id="btnVacStdMinus" aria-label="Halbe Stunde weniger">−</button>
                       <div class="vac-hero-input-wrap">
@@ -184,6 +176,14 @@
                         <span class="vac-hero-unit">h</span>
                       </div>
                       <button type="button" class="vac-hero-step-btn" id="btnVacStdPlus" aria-label="Halbe Stunde mehr">+</button>
+                    </div>
+
+                    <div class="vac-presets-group" id="vacQuickPresetGroup">
+                      <button type="button" class="vac-preset-pill" data-vac-preset="auto" id="btnVacPresetAuto">2.4h</button>
+                      <button type="button" class="vac-preset-pill" data-vac-preset="3">3h</button>
+                      <button type="button" class="vac-preset-pill" data-vac-preset="4">4h</button>
+                      <button type="button" class="vac-preset-pill" data-vac-preset="6">6h</button>
+                      <button type="button" class="vac-preset-pill" data-vac-preset="8">8h</button>
                     </div>
                   </div>
                 </div>
@@ -365,6 +365,6 @@
   <section id="printTimesheetSection"></section>
 
   <!-- App Entry Script -->
-  <script type="module" src="js/app.js?v=4.5.1"></script>
+  <script type="module" src="js/app.js?v=4.5.2"></script>
 </body>
 </html>
