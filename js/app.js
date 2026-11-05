@@ -47,6 +47,7 @@ class ShiftlyApp {
     this.vacCalYear = now.getFullYear();
     this.vacCalMonth = now.getMonth();
     this.vacSelectedDays = new Map(); // Map<isoDate, hoursNumber>
+    this.vacActiveDay = null; // Currently focused day in the vacation calendar
 
     this.config = {
       weeklyTargetHours: 12.0,
@@ -183,17 +184,23 @@ class ShiftlyApp {
       });
     });
 
-    // Entry Date Stepper (Prev Day, Next Day, Today)
+    // Entry Date Stepper (Prev Day, Next Day, Today) & Native Date Overlay
     const btnDatePrev = document.getElementById('btnDatePrev');
     const btnDateNext = document.getElementById('btnDateNext');
     const btnDateToday = document.getElementById('btnDateToday');
+    const entryDateInput = document.getElementById('entryDate');
     if (btnDatePrev) btnDatePrev.addEventListener('click', () => this.stepEntryDate(-1));
     if (btnDateNext) btnDateNext.addEventListener('click', () => this.stepEntryDate(1));
     if (btnDateToday) {
       btnDateToday.addEventListener('click', () => {
-        const dateInput = document.getElementById('entryDate');
-        if (dateInput) dateInput.value = toLocalIsoDate(new Date());
+        if (entryDateInput) {
+          entryDateInput.value = toLocalIsoDate(new Date());
+          this.updateEntryDateDisplay();
+        }
       });
+    }
+    if (entryDateInput) {
+      entryDateInput.addEventListener('change', () => this.updateEntryDateDisplay());
     }
 
     // Vacation Calendar Month Steppers & Controls
@@ -205,34 +212,80 @@ class ShiftlyApp {
     if (btnVacCalClear) {
       btnVacCalClear.addEventListener('click', () => {
         this.vacSelectedDays.clear();
+        this.vacActiveDay = null;
         this.renderVacationPlanner();
         this.updateEntryLiveButton();
       });
     }
 
+    // Tactile Vacation Hours Hero Card Controls (Presets, +/- Steppers, Input, Apply to All)
     const btnVacStdMinus = document.getElementById('btnVacStdMinus');
     const btnVacStdPlus = document.getElementById('btnVacStdPlus');
     const vacDefInput = document.getElementById('vacDefaultHoursInput');
     if (btnVacStdMinus && vacDefInput) {
       btnVacStdMinus.addEventListener('click', () => {
         const cur = Number(vacDefInput.value) || 0;
-        vacDefInput.value = Math.max(0, Number((cur - 0.5).toFixed(2)));
-        this.applyDefaultHoursToAllSelectedVacDays(Number(vacDefInput.value));
+        const nextVal = Math.max(0, Number((cur - 0.5).toFixed(2)));
+        vacDefInput.value = nextVal;
+        this.setVacationHoursFromHero(nextVal);
       });
     }
     if (btnVacStdPlus && vacDefInput) {
       btnVacStdPlus.addEventListener('click', () => {
         const cur = Number(vacDefInput.value) || 0;
-        vacDefInput.value = Math.min(24, Number((cur + 0.5).toFixed(2)));
-        this.applyDefaultHoursToAllSelectedVacDays(Number(vacDefInput.value));
+        const nextVal = Math.min(24, Number((cur + 0.5).toFixed(2)));
+        vacDefInput.value = nextVal;
+        this.setVacationHoursFromHero(nextVal);
       });
     }
     if (vacDefInput) {
       vacDefInput.addEventListener('change', () => {
         const val = Math.max(0, Math.min(24, Number(vacDefInput.value) || 0));
         vacDefInput.value = val;
-        this.applyDefaultHoursToAllSelectedVacDays(val);
+        this.setVacationHoursFromHero(val);
       });
+    }
+
+    document.querySelectorAll('.vac-preset-pill[data-vac-preset]').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const raw = pill.getAttribute('data-vac-preset');
+        const val = raw === 'auto'
+          ? (Number((this.config.weeklyTargetHours / 5).toFixed(2)) || 2.4)
+          : (Number(raw) || 0);
+        if (vacDefInput) vacDefInput.value = val;
+        this.setVacationHoursFromHero(val);
+      });
+    });
+
+    const btnVacApplyAll = document.getElementById('btnVacApplyAll');
+    if (btnVacApplyAll) {
+      btnVacApplyAll.addEventListener('click', () => {
+        const val = Number(document.getElementById('vacDefaultHoursInput')?.value) || 0;
+        this.applyDefaultHoursToAllSelectedVacDays(val);
+        this.showToast(`✓ ${TimeEngine.formatHoursPretty(val)} für alle ${this.vacSelectedDays.size} Tage übernommen`);
+      });
+    }
+
+    // Single Vacation Edit Mode +/- Steppers & Live Input
+    const btnVacSingleMinus = document.getElementById('btnVacSingleMinus');
+    const btnVacSinglePlus = document.getElementById('btnVacSinglePlus');
+    const vacSingleInput = document.getElementById('vacationPaidHours');
+    if (btnVacSingleMinus && vacSingleInput) {
+      btnVacSingleMinus.addEventListener('click', () => {
+        const cur = Number(vacSingleInput.value) || 0;
+        vacSingleInput.value = Math.max(0, Number((cur - 0.5).toFixed(2)));
+        this.updateEntryLiveButton();
+      });
+    }
+    if (btnVacSinglePlus && vacSingleInput) {
+      btnVacSinglePlus.addEventListener('click', () => {
+        const cur = Number(vacSingleInput.value) || 0;
+        vacSingleInput.value = Math.min(24, Number((cur + 0.5).toFixed(2)));
+        this.updateEntryLiveButton();
+      });
+    }
+    if (vacSingleInput) {
+      vacSingleInput.addEventListener('input', () => this.updateEntryLiveButton());
     }
 
     const btnVacSelectRange = document.getElementById('btnVacSelectRange');
@@ -278,12 +331,6 @@ class ShiftlyApp {
         });
       }
     });
-
-    // Live calculation on single-day edit vacation hours change
-    const vacSingleInput = document.getElementById('vacationPaidHours');
-    if (vacSingleInput) {
-      vacSingleInput.addEventListener('input', () => this.updateEntryLiveButton());
-    }
 
     // Cancel Edit Mode
     const btnCancelEdit = document.getElementById('btnCancelEdit');
@@ -442,6 +489,20 @@ class ShiftlyApp {
     });
   }
 
+  updateEntryDateDisplay() {
+    const dateInput = document.getElementById('entryDate');
+    const displayEl = document.getElementById('entryDateDisplay');
+    if (!dateInput || !displayEl) return;
+
+    const val = dateInput.value || toLocalIsoDate(new Date());
+    const dObj = new Date(val + 'T00:00:00');
+    if (isNaN(dObj)) {
+      displayEl.textContent = val;
+    } else {
+      displayEl.textContent = dateFormatter.format(dObj);
+    }
+  }
+
   stepEntryDate(deltaDays) {
     const dateInput = document.getElementById('entryDate');
     if (!dateInput) return;
@@ -449,6 +510,7 @@ class ShiftlyApp {
     if (isNaN(current)) return;
     current.setDate(current.getDate() + deltaDays);
     dateInput.value = toLocalIsoDate(current);
+    this.updateEntryDateDisplay();
   }
 
   setEntryType(type) {
@@ -499,6 +561,18 @@ class ShiftlyApp {
     return Number((this.config.weeklyTargetHours / 5).toFixed(2)) || 2.4;
   }
 
+  setVacationHoursFromHero(hoursVal) {
+    if (this.vacActiveDay && this.vacSelectedDays.has(this.vacActiveDay)) {
+      this.vacSelectedDays.set(this.vacActiveDay, hoursVal);
+    } else {
+      for (const dateKey of this.vacSelectedDays.keys()) {
+        this.vacSelectedDays.set(dateKey, hoursVal);
+      }
+    }
+    this.renderVacationPlanner();
+    this.updateEntryLiveButton();
+  }
+
   applyDefaultHoursToAllSelectedVacDays(hoursVal) {
     for (const dateKey of this.vacSelectedDays.keys()) {
       this.vacSelectedDays.set(dateKey, hoursVal);
@@ -508,12 +582,19 @@ class ShiftlyApp {
   }
 
   toggleVacationDay(isoDate) {
-    if (this.vacSelectedDays.has(isoDate)) {
-      this.vacSelectedDays.delete(isoDate);
-    } else {
+    if (!this.vacSelectedDays.has(isoDate)) {
       const existingVac = this.records.find(r => r.type === 'vacation' && r.date === isoDate);
       const hrs = existingVac ? (Number(existingVac.net_hours) || this.getDefaultDailyVacationHours()) : this.getDefaultDailyVacationHours();
       this.vacSelectedDays.set(isoDate, hrs);
+      this.vacActiveDay = isoDate;
+    } else if (this.vacActiveDay !== isoDate && this.vacSelectedDays.size > 1) {
+      // Tapping an already selected day when multiple days are selected focuses it for individual hours editing
+      this.vacActiveDay = isoDate;
+    } else {
+      // Tapping the currently focused day removes it from selection
+      this.vacSelectedDays.delete(isoDate);
+      const remaining = Array.from(this.vacSelectedDays.keys()).sort();
+      this.vacActiveDay = remaining.length > 0 ? remaining[remaining.length - 1] : null;
     }
     this.renderVacationPlanner();
     this.updateEntryLiveButton();
@@ -544,6 +625,7 @@ class ShiftlyApp {
       cur.setDate(cur.getDate() + 1);
     }
 
+    this.vacActiveDay = null; // Edit all selected range days together until user taps a specific day
     this.renderVacationPlanner();
     this.updateEntryLiveButton();
     if (added > 0) {
@@ -554,13 +636,19 @@ class ShiftlyApp {
   renderVacationPlanner() {
     const labelEl = document.getElementById('vacCalMonthLabel');
     const gridEl = document.getElementById('vacCalendarGrid');
-    const listEl = document.getElementById('vacSelectedDaysList');
-    if (!gridEl || !listEl) return;
+    if (!gridEl) return;
 
     const firstDayObj = new Date(this.vacCalYear, this.vacCalMonth, 1);
     const daysInMonth = new Date(this.vacCalYear, this.vacCalMonth + 1, 0).getDate();
     if (labelEl) {
       labelEl.textContent = firstDayObj.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });
+    }
+
+    // Update Auto Preset Pill label (e.g. 2.4h for 12h/week)
+    const autoHours = Number((this.config.weeklyTargetHours / 5).toFixed(2)) || 2.4;
+    const autoPill = document.getElementById('btnVacPresetAuto');
+    if (autoPill) {
+      autoPill.textContent = `${autoHours}h`;
     }
 
     // Monday-based weekday offset (0 = Mon ... 6 = Sun)
@@ -588,6 +676,7 @@ class ShiftlyApp {
       const isWeekend = dow >= 5;
       const isToday = iso === todayIso;
       const isSelected = this.vacSelectedDays.has(iso);
+      const isActiveDay = isSelected && this.vacActiveDay === iso;
       const isSavedVac = savedVacMap.has(iso);
 
       const hrs = isSelected
@@ -601,7 +690,8 @@ class ShiftlyApp {
         isWeekend ? 'is-weekend' : '',
         isToday ? 'is-today' : '',
         isSavedVac && !isSelected ? 'has-saved-vac' : '',
-        isSelected ? 'is-selected' : ''
+        isSelected ? 'is-selected' : '',
+        isActiveDay ? 'is-active-day' : ''
       ].filter(Boolean).join(' ');
 
       const hrsBadge = hrs !== null ? `<span class="vac-day-hrs">${hrs}h</span>` : '';
@@ -622,63 +712,38 @@ class ShiftlyApp {
       });
     });
 
-    // Render Selected Days Individual Hours List
-    const sortedDates = Array.from(this.vacSelectedDays.keys()).sort();
-    if (sortedDates.length === 0) {
-      listEl.innerHTML = `<div class="vac-selected-empty">Urlaubstage oben im Kalender antippen (oder Start- & Endtag wählen und „↔ Zeitraum“ klicken).</div>`;
-      return;
+    // Update Tactile Hours Hero Card state
+    const targetTitleEl = document.getElementById('vacActiveDayLabel');
+    const applyAllBtn = document.getElementById('btnVacApplyAll');
+    const heroInput = document.getElementById('vacDefaultHoursInput');
+
+    let currentHeroHours = heroInput ? (Number(heroInput.value) || autoHours) : autoHours;
+
+    if (this.vacActiveDay && this.vacSelectedDays.has(this.vacActiveDay)) {
+      currentHeroHours = this.vacSelectedDays.get(this.vacActiveDay);
+      if (heroInput) heroInput.value = currentHeroHours;
+      const dObj = new Date(this.vacActiveDay + 'T00:00:00');
+      const dLabel = isNaN(dObj) ? this.vacActiveDay : dateFormatter.format(dObj);
+      if (targetTitleEl) {
+        targetTitleEl.textContent = this.vacSelectedDays.size > 1
+          ? `${dLabel} (Nochmal tippen = abwählen)`
+          : dLabel;
+      }
+      if (applyAllBtn) applyAllBtn.hidden = this.vacSelectedDays.size <= 1;
+    } else {
+      if (targetTitleEl) {
+        targetTitleEl.textContent = this.vacSelectedDays.size > 0
+          ? `Alle ${this.vacSelectedDays.size} gewählten Tage`
+          : 'Standard für neue Urlaubstage';
+      }
+      if (applyAllBtn) applyAllBtn.hidden = true;
     }
 
-    listEl.innerHTML = sortedDates.map(iso => {
-      const hrs = this.vacSelectedDays.get(iso) ?? 0;
-      const dObj = new Date(iso + 'T00:00:00');
-      const label = isNaN(dObj) ? iso : dateFormatter.format(dObj);
-      return `
-        <div class="vac-day-row" data-row-date="${iso}">
-          <span class="vac-day-row-date">🌴 ${label}</span>
-          <div class="vac-day-row-controls">
-            <button type="button" class="vac-row-step-btn" data-step="-0.5" data-date="${iso}">−</button>
-            <input type="number" step="0.25" min="0" max="24" class="vac-row-hours-input" data-date="${iso}" value="${hrs}">
-            <span class="vac-row-unit">h</span>
-            <button type="button" class="vac-row-step-btn" data-step="0.5" data-date="${iso}">+</button>
-            <button type="button" class="vac-row-remove-btn" data-remove-date="${iso}" title="Entfernen">✕</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    listEl.querySelectorAll('.vac-row-step-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const iso = btn.getAttribute('data-date');
-        const delta = Number(btn.getAttribute('data-step')) || 0;
-        if (!iso || !this.vacSelectedDays.has(iso)) return;
-        const nextVal = Math.max(0, Math.min(24, Number(((this.vacSelectedDays.get(iso) || 0) + delta).toFixed(2))));
-        this.vacSelectedDays.set(iso, nextVal);
-        this.renderVacationPlanner();
-        this.updateEntryLiveButton();
-      });
-    });
-
-    listEl.querySelectorAll('.vac-row-hours-input').forEach(inp => {
-      inp.addEventListener('change', () => {
-        const iso = inp.getAttribute('data-date');
-        if (!iso || !this.vacSelectedDays.has(iso)) return;
-        const val = Math.max(0, Math.min(24, Number(inp.value) || 0));
-        this.vacSelectedDays.set(iso, val);
-        this.renderVacationPlanner();
-        this.updateEntryLiveButton();
-      });
-    });
-
-    listEl.querySelectorAll('.vac-row-remove-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const iso = btn.getAttribute('data-remove-date');
-        if (iso) {
-          this.vacSelectedDays.delete(iso);
-          this.renderVacationPlanner();
-          this.updateEntryLiveButton();
-        }
-      });
+    // Highlight matching preset pill
+    document.querySelectorAll('.vac-preset-pill[data-vac-preset]').forEach(pill => {
+      const raw = pill.getAttribute('data-vac-preset');
+      const pillVal = raw === 'auto' ? autoHours : Number(raw);
+      pill.classList.toggle('active', Math.abs(pillVal - currentHeroHours) < 0.01);
     });
   }
 
@@ -698,6 +763,7 @@ class ShiftlyApp {
     this.vacCalYear = now.getFullYear();
     this.vacCalMonth = now.getMonth();
     this.vacSelectedDays.clear();
+    this.vacActiveDay = null;
 
     const dateInput = document.getElementById('entryDate');
     const breakInput = document.getElementById('shiftBreak');
@@ -708,6 +774,7 @@ class ShiftlyApp {
     const defaultVacHours = Number((this.config.weeklyTargetHours / 5).toFixed(2)) || 2.4;
 
     if (dateInput) dateInput.value = toLocalIsoDate(now);
+    this.updateEntryDateDisplay();
     this.set24hSelectFromTimeStr('shiftStart', '08:00');
     this.set24hSelectFromTimeStr('shiftEnd', '12:00');
     if (breakInput) breakInput.value = this.config.defaultBreak;
@@ -735,6 +802,7 @@ class ShiftlyApp {
     const noteInput = document.getElementById('entryNote');
 
     if (dateInput) dateInput.value = rec.date;
+    this.updateEntryDateDisplay();
     this.set24hSelectFromTimeStr('shiftStart', rec.start_time || '08:00');
     this.set24hSelectFromTimeStr('shiftEnd', rec.end_time || '12:00');
     if (breakInput) breakInput.value = rec.break_minutes ?? 0;
@@ -821,6 +889,7 @@ class ShiftlyApp {
       const count = sortedDates.length;
       await this.loadRecords();
       this.vacSelectedDays.clear();
+      this.vacActiveDay = null;
       if (document.getElementById('entryNote')) document.getElementById('entryNote').value = '';
       this.render();
       this.renderVacationPlanner();
