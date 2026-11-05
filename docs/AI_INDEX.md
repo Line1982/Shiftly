@@ -11,18 +11,19 @@
 | Fachliche Aufgabe / Thema | Primäre Datei | Relevante Zeilen | Verbundene Dateien / Schicht |
 | :--- | :--- | :--- | :--- |
 | **Schichtdauer & Pausenrechnung (Mitternachtssprung)** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **10–40** (`calculateNetHours`) | `js/app.js`: Modal Live-Preview |
-| **10–15h Wochen-Korridor & Überstunden** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **50–85** (`calculateCorridorDelta`, `getIsoWeek`) | `js/app.js`: 180–235 (`renderDashboard`) |
-| **Datumsbereichs- & Urlaubs-Aggregation** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **85–185** (`aggregateDateRange`) | `js/app.js`: 170–240 (`render`) |
-| **Kumulierter Gesamt-Überstundensaldo** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **188–215** (`calculateLifetimeOvertime`) | `js/app.js`: 185–210 |
+| **10–15h Wochen-Korridor & Überstunden** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **50–85** (`calculateCorridorDelta`, `getIsoWeek`) | `js/app.js`: 410–475 (`renderCurrentWeekSpotlight`) |
+| **Datumsbereichs- & Urlaubs-Aggregation** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **85–185** (`aggregateDateRange`) | `js/app.js`: 355–410 (`render`, `renderHeader`) |
+| **Kumulierter Gesamt-Überstundensaldo** | [`js/time_engine.js`](file:///d:/Dev/Shiftly/js/time_engine.js) | **188–215** (`calculateLifetimeOvertime`) | `js/app.js`: 480–520 (`renderDashboard`) |
 | **IndexedDB Schema & Stores (`shifts`, `settings`)**| [`js/db.js`](file:///d:/Dev/Shiftly/js/db.js) | **15–58** (`init`, `onupgradeneeded` v2) | `docs/DATA_MODEL.md` |
 | **Einträge CRUD (Arbeitsschichten & Urlaub)** | [`js/db.js`](file:///d:/Dev/Shiftly/js/db.js) | **60–120** (`getAllRecords`, `saveRecord`) | `js/app.js`: Event-Bindings & Handler |
-| **Settings Storage (10–15h, Urlaubstage, Namen)**| [`js/db.js`](file:///d:/Dev/Shiftly/js/db.js) | **125–160** (`getSetting`, `setSetting`) | `js/app.js`: 45–70 (`loadSettings`) |
-| **JSON Datensicherung (Web Share API / File)** | [`js/export_service.js`](file:///d:/Dev/Shiftly/js/export_service.js) | **10–55** (`backupAndShare`) | `js/app.js`: 445–460 (`handleBackupShare`) |
-| **Stundenzettel CSV-Export (Excel-kompatibel)** | [`js/export_service.js`](file:///d:/Dev/Shiftly/js/export_service.js) | **85–125** (`exportDateRangeCsv`) | `js/app.js`: 475–485 (`handleExportCsv`) |
-| **Druck-Stundenzettel (DIN A4 PDF Rendering)** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **300–375** (`renderPrintTimesheet`) | [`styles.css`](file:///d:/Dev/Shiftly/styles.css): 420–475 (`@media print`) |
-| **Zeitraum-Filter & Schnell-Presets (26.–25.)** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **135–180** (`applyPeriodPreset`, Filter) | `index.html`: `.period-filter-bar` |
-| **Vereintes Eingabemodal (Arbeit & Urlaub)** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **380–435** (`openEntryModal`, `updateModalTypeFields`)| `index.html`: `#entryModal` |
-| **Mobile-First CSS & Safe Areas (Notch)** | [`styles.css`](file:///d:/Dev/Shiftly/styles.css) | **25–65** (Safe-Area Insets & Header) | `index.html`: Viewport-Fit |
+| **Settings Storage (10–15h, Urlaubstage, Namen)**| [`js/db.js`](file:///d:/Dev/Shiftly/js/db.js) | **125–160** (`getSetting`, `setSetting`) | `js/app.js`: 65–95 (`loadSettings`) |
+| **JSON Datensicherung (Web Share API / File)** | [`js/export_service.js`](file:///d:/Dev/Shiftly/js/export_service.js) | **10–55** (`backupAndShare`) | `js/app.js`: 790–815 (`handleBackupShare`) |
+| **Stundenzettel CSV-Export (Excel-kompatibel)** | [`js/export_service.js`](file:///d:/Dev/Shiftly/js/export_service.js) | **85–125** (`exportDateRangeCsv`) | `js/app.js`: 820–825 (`handleExportCsv`) |
+| **Druck-Stundenzettel (DIN A4 PDF Rendering)** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **620–710** (`renderPrintTimesheet`) | [`styles.css`](file:///d:/Dev/Shiftly/styles.css): 810–875 (`@media print`) |
+| **Zeitraum-Pills, Monats-Stepper & Presets** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **260–345** (`shiftPeriodByMonths`, `applyPeriodPreset`) | `index.html`: `.period-bar` |
+| **1-Tap Schnell-Vorlagen & Kopier-Funktion** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **325–345**, **580–605** (`quickCreateTodayShift`, `duplicateRecordToToday`) | `index.html`: `.quick-launcher-card` |
+| **Vereintes Bottom-Sheet Modal & Quick-Chips** | [`js/app.js`](file:///d:/Dev/Shiftly/js/app.js) | **710–790** (`openEntryModal`, `updateModalNetHours`) | `index.html`: `#entryModal` |
+| **Daylight Design System & Floating Glass Dock** | [`styles.css`](file:///d:/Dev/Shiftly/styles.css) | **1–125** (Variablen, Header), **565–635** (Floating Dock) | `index.html`: `.bottom-dock-wrapper` |
 
 ---
 
@@ -49,9 +50,10 @@
 - **L127–L135:** `printTimesheet()`: Triggert `window.print()` für DIN A4 PDF.
 
 ### 2.4 `js/app.js` (UI Controller)
-- **L25–L55:** `init()`, `loadSettings()`, `loadRecords()`.
-- **L75–L130:** `bindEvents()`: Date-Picker, Presets, FAB, Modals, Forms.
-- **L135–L180:** `applyPeriodPreset(key)`: Schaltet flexiblen Zeitraum um (z. B. 26.–25.).
-- **L185–L260:** `renderDashboard(agg, lifetimeOvertime)`: KPI-Karten, Urlaubskonto, Wochenaufschlüsselung.
-- **L300–L375:** `renderPrintTimesheet(agg, lifetimeOvertime)`: Erzeugt druckfertigen DIN A4 Stundenzettel mit Unterschriftenzeilen.
-- **L380–L445:** `openEntryModal(defaultType, recordId)` & `handleEntrySubmit(e)`.
+- **L50–L115:** `init()`, `loadSettings()`, `loadRecords()`, `showToast()`.
+- **L118–L260:** `bindEvents()`: Navigation, Perioden-Pills, 1-Tap Vorlagen, Modal-Quick-Chips, Suche & Filter.
+- **L265–L345:** `shiftPeriodByMonths()`, `applyPeriodPreset()`, `quickCreateTodayShift()`.
+- **L410–L550:** `renderCurrentWeekSpotlight()`, `renderDashboard()`: Live-Wochenkorridor-Balken, Bento-KPIs, Wochenaufschlüsselung.
+- **L555–L605:** `renderShiftsList()`, `renderRecordItemHtml()`, `duplicateRecordToToday()`.
+- **L620–L710:** `renderPrintTimesheet(agg, lifetimeOvertime)`: Erzeugt druckfertigen DIN A4 Stundenzettel mit Unterschriftenzeilen.
+- **L710–L790:** `openEntryModal()`, `updateModalTypeFields()`, `updateModalNetHours()`, `handleEntrySubmit()`.

@@ -3,7 +3,7 @@
  * Provides full offline cache, instantaneous loads and automatic cache updates.
  */
 
-const CACHE_NAME = 'shiftly-cache-v1.0.0';
+const CACHE_NAME = 'shiftly-cache-v3.0.0';
 
 const ASSETS_TO_CACHE = [
   './',
