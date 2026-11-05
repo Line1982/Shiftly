@@ -1,36 +1,23 @@
 /**
  * Shiftly Main Application Controller (js/app.js)
- * Manages state, tabs, date range filters, quick actions, modals, calculations and exports.
+ * Focused Single-Screen Mobile UX with Swipeable Tabs, Stacked Full-Width Time Cards,
+ * Configurable Weekly Target Hours (default 12h), and Zero Clutter.
  */
 
 import { db } from './db.js';
 import { TimeEngine } from './time_engine.js';
 import { ExportService } from './export_service.js';
 
-const currencyFormatter = new Intl.NumberFormat('de-DE', {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-});
-
 const dateFormatter = new Intl.DateTimeFormat('de-DE', {
   weekday: 'short',
   day: '2-digit',
-  month: '2-digit',
-  year: 'numeric'
+  month: '2-digit'
 });
 
 const shortDateFormatter = new Intl.DateTimeFormat('de-DE', {
   day: '2-digit',
-  month: 'short',
-  year: 'numeric'
-});
-
-const todayBannerFormatter = new Intl.DateTimeFormat('de-DE', {
-  weekday: 'long',
-  day: '2-digit',
-  month: 'short'
+  month: '2-digit',
+  year: '2-digit'
 });
 
 function toLocalIsoDate(dateObj = new Date()) {
@@ -50,14 +37,19 @@ class ShiftlyApp {
     this.startDate = `${y}-${m}-01`;
     this.endDate = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
     this.activePreset = 'current_month';
-    this.activeTab = 'dashboard';
-    this.listFilterType = 'all';
-    this.listSearchQuery = '';
+
+    this.activeTabIndex = 0; // 0: entry, 1: shifts, 2: settings
+    this.historySubView = 'list'; // 'list' | 'weeks'
+    this.entryType = 'work'; // 'work' | 'vacation'
+    this.editingRecordId = null;
+
+    // Vacation Calendar & Range Planner State
+    this.vacCalYear = now.getFullYear();
+    this.vacCalMonth = now.getMonth();
+    this.vacSelectedDays = new Map(); // Map<isoDate, hoursNumber>
 
     this.config = {
-      weeklyHoursMin: 10.0,
-      weeklyHoursMax: 15.0,
-      hourlyRate: 14.00,
+      weeklyTargetHours: 12.0,
       defaultBreak: 0,
       vacationDaysTotal: 20,
       userName: '',
@@ -65,37 +57,92 @@ class ShiftlyApp {
     };
 
     this.records = [];
-    this.editingRecordId = null;
   }
 
   async init() {
-    console.info('Initialisiere Shiftly App...');
     await db.init();
     await this.loadSettings();
     await this.loadRecords();
 
+    this.init24hTimeSelects();
     this.registerServiceWorker();
+    this.resetEntryFormToDefaults();
     this.bindEvents();
+    this.initSwipeNavigation();
     this.render();
   }
 
+  init24hTimeSelects() {
+    const hourIds = ['shiftStartHour', 'shiftEndHour'];
+    const minIds = ['shiftStartMin', 'shiftEndMin'];
+
+    const hourOptions = Array.from({ length: 24 }, (_, h) => {
+      const val = String(h).padStart(2, '0');
+      return `<option value="${val}">${val}</option>`;
+    }).join('');
+
+    const minValues = [];
+    for (let m = 0; m < 60; m += 5) {
+      minValues.push(String(m).padStart(2, '0'));
+    }
+
+    hourIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = hourOptions;
+    });
+
+    minIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerHTML = minValues.map(v => `<option value="${v}">${v}</option>`).join('');
+      }
+    });
+  }
+
+  set24hSelectFromTimeStr(prefix, timeStr) {
+    const [hRaw = '08', mRaw = '00'] = (timeStr || '08:00').split(':');
+    const h = String(Number(hRaw) || 0).padStart(2, '0');
+    const m = String(Number(mRaw) || 0).padStart(2, '0');
+
+    const hEl = document.getElementById(`${prefix}Hour`);
+    const mEl = document.getElementById(`${prefix}Min`);
+    const hiddenEl = document.getElementById(prefix);
+
+    if (hEl) hEl.value = h;
+    if (mEl) {
+      if (![...mEl.options].some(opt => opt.value === m)) {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        mEl.appendChild(opt);
+      }
+      mEl.value = m;
+    }
+    if (hiddenEl) hiddenEl.value = `${h}:${m}`;
+  }
+
+  syncHiddenTimeFromSelects(prefix) {
+    const hEl = document.getElementById(`${prefix}Hour`);
+    const mEl = document.getElementById(`${prefix}Min`);
+    const hiddenEl = document.getElementById(prefix);
+    if (hEl && mEl && hiddenEl) {
+      hiddenEl.value = `${hEl.value}:${mEl.value}`;
+    }
+  }
+
   async loadSettings() {
-    const minH = await db.getSetting('weeklyHoursMin', 10.0);
-    const maxH = await db.getSetting('weeklyHoursMax', 15.0);
-    const wage = await db.getSetting('hourlyRate', 14.00);
+    const targetH = await db.getSetting('weeklyTargetHours', 12.0);
     const defBreak = await db.getSetting('defaultBreak', 0);
     const vacTotal = await db.getSetting('vacationDaysTotal', 20);
     const user = await db.getSetting('userName', '');
     const employer = await db.getSetting('employerName', '');
 
     this.config = {
-      weeklyHoursMin: Number(minH),
-      weeklyHoursMax: Number(maxH),
-      hourlyRate: Number(wage),
-      defaultBreak: Number(defBreak),
-      vacationDaysTotal: Number(vacTotal),
-      userName: String(user),
-      employerName: String(employer)
+      weeklyTargetHours: Number(targetH) || 12.0,
+      defaultBreak: Number(defBreak) || 0,
+      vacationDaysTotal: Number(vacTotal) || 20,
+      userName: String(user || ''),
+      employerName: String(employer || '')
     };
   }
 
@@ -106,9 +153,9 @@ class ShiftlyApp {
   registerServiceWorker() {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then((reg) => console.log('ServiceWorker registriert:', reg.scope))
-          .catch((err) => console.warn('ServiceWorker Registrierung fehlgeschlagen:', err));
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          reg.update().catch(() => {});
+        }).catch(() => {});
       });
     }
   }
@@ -122,57 +169,155 @@ class ShiftlyApp {
     container.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';
-      toast.style.transition = 'opacity 0.25s ease';
-      setTimeout(() => toast.remove(), 260);
-    }, 2600);
+      toast.style.transition = 'opacity 0.2s ease';
+      setTimeout(() => toast.remove(), 220);
+    }, 2000);
   }
 
   bindEvents() {
     // Bottom Navigation Tabs
-    document.querySelectorAll('.bottom-nav-btn[data-tab]').forEach(btn => {
+    document.querySelectorAll('.nav-tab[data-index]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const targetTab = btn.getAttribute('data-tab');
-        if (targetTab) this.switchTab(targetTab);
+        const idx = Number(btn.getAttribute('data-index'));
+        this.switchTabByIndex(idx);
       });
     });
 
-    // See All Shifts Link on Dashboard
-    const btnSeeAll = document.getElementById('btnSeeAllShifts');
-    if (btnSeeAll) {
-      btnSeeAll.addEventListener('click', () => this.switchTab('shifts'));
+    // Entry Date Stepper (Prev Day, Next Day, Today)
+    const btnDatePrev = document.getElementById('btnDatePrev');
+    const btnDateNext = document.getElementById('btnDateNext');
+    const btnDateToday = document.getElementById('btnDateToday');
+    if (btnDatePrev) btnDatePrev.addEventListener('click', () => this.stepEntryDate(-1));
+    if (btnDateNext) btnDateNext.addEventListener('click', () => this.stepEntryDate(1));
+    if (btnDateToday) {
+      btnDateToday.addEventListener('click', () => {
+        const dateInput = document.getElementById('entryDate');
+        if (dateInput) dateInput.value = toLocalIsoDate(new Date());
+      });
     }
 
-    // Period Preset Pills
-    document.querySelectorAll('.period-pill[data-preset]').forEach(pill => {
+    // Vacation Calendar Month Steppers & Controls
+    const btnVacCalPrev = document.getElementById('btnVacCalPrev');
+    const btnVacCalNext = document.getElementById('btnVacCalNext');
+    const btnVacCalClear = document.getElementById('btnVacCalClear');
+    if (btnVacCalPrev) btnVacCalPrev.addEventListener('click', () => this.shiftVacCalendarMonth(-1));
+    if (btnVacCalNext) btnVacCalNext.addEventListener('click', () => this.shiftVacCalendarMonth(1));
+    if (btnVacCalClear) {
+      btnVacCalClear.addEventListener('click', () => {
+        this.vacSelectedDays.clear();
+        this.renderVacationPlanner();
+        this.updateEntryLiveButton();
+      });
+    }
+
+    const btnVacStdMinus = document.getElementById('btnVacStdMinus');
+    const btnVacStdPlus = document.getElementById('btnVacStdPlus');
+    const vacDefInput = document.getElementById('vacDefaultHoursInput');
+    if (btnVacStdMinus && vacDefInput) {
+      btnVacStdMinus.addEventListener('click', () => {
+        const cur = Number(vacDefInput.value) || 0;
+        vacDefInput.value = Math.max(0, Number((cur - 0.5).toFixed(2)));
+        this.applyDefaultHoursToAllSelectedVacDays(Number(vacDefInput.value));
+      });
+    }
+    if (btnVacStdPlus && vacDefInput) {
+      btnVacStdPlus.addEventListener('click', () => {
+        const cur = Number(vacDefInput.value) || 0;
+        vacDefInput.value = Math.min(24, Number((cur + 0.5).toFixed(2)));
+        this.applyDefaultHoursToAllSelectedVacDays(Number(vacDefInput.value));
+      });
+    }
+    if (vacDefInput) {
+      vacDefInput.addEventListener('change', () => {
+        const val = Math.max(0, Math.min(24, Number(vacDefInput.value) || 0));
+        vacDefInput.value = val;
+        this.applyDefaultHoursToAllSelectedVacDays(val);
+      });
+    }
+
+    const btnVacSelectRange = document.getElementById('btnVacSelectRange');
+    if (btnVacSelectRange) {
+      btnVacSelectRange.addEventListener('click', () => this.fillVacationRangeWeekdays());
+    }
+
+    // Entry Type Switch (Arbeit vs. Urlaub)
+    document.querySelectorAll('.type-pill[data-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-type') || 'work';
+        this.setEntryType(t);
+      });
+    });
+
+    // Break Pills (Keine, 15m, 30m, 45m)
+    document.querySelectorAll('.break-pill[data-break]').forEach(pill => {
       pill.addEventListener('click', () => {
-        const preset = pill.getAttribute('data-preset');
-        if (preset === 'custom') {
-          this.toggleCustomDateDrawer();
-        } else {
-          this.applyPeriodPreset(preset);
-        }
+        const val = Number(pill.getAttribute('data-break')) || 0;
+        const breakInput = document.getElementById('shiftBreak');
+        if (breakInput) breakInput.value = val;
+        this.syncBreakPillsUI(val);
+        this.updateEntryLiveButton();
       });
     });
 
-    // Legacy select support
-    const presetSelect = document.getElementById('periodPresetSelect');
-    if (presetSelect) {
-      presetSelect.addEventListener('change', (e) => this.applyPeriodPreset(e.target.value));
+    // 24h Time Selects Live Sync
+    ['shiftStartHour', 'shiftStartMin'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', () => {
+          this.syncHiddenTimeFromSelects('shiftStart');
+          this.updateEntryLiveButton();
+        });
+      }
+    });
+    ['shiftEndHour', 'shiftEndMin'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', () => {
+          this.syncHiddenTimeFromSelects('shiftEnd');
+          this.updateEntryLiveButton();
+        });
+      }
+    });
+
+    // Live calculation on single-day edit vacation hours change
+    const vacSingleInput = document.getElementById('vacationPaidHours');
+    if (vacSingleInput) {
+      vacSingleInput.addEventListener('input', () => this.updateEntryLiveButton());
     }
 
-    // Active period label toggles custom date drawer
+    // Cancel Edit Mode
+    const btnCancelEdit = document.getElementById('btnCancelEdit');
+    if (btnCancelEdit) {
+      btnCancelEdit.addEventListener('click', () => {
+        this.resetEntryFormToDefaults();
+      });
+    }
+
+    // Submit Entry Form
+    const entryForm = document.getElementById('entryForm');
+    if (entryForm) {
+      entryForm.addEventListener('submit', (e) => this.handleEntrySubmit(e));
+    }
+
+    // Tab 2 (History): Month Steppers & Custom Date Drawer
+    const btnPrevPeriod = document.getElementById('btnPrevPeriod');
+    const btnNextPeriod = document.getElementById('btnNextPeriod');
     const btnActivePeriodLabel = document.getElementById('btnActivePeriodLabel');
+    if (btnPrevPeriod) btnPrevPeriod.addEventListener('click', () => this.shiftPeriodByMonths(-1));
+    if (btnNextPeriod) btnNextPeriod.addEventListener('click', () => this.shiftPeriodByMonths(1));
     if (btnActivePeriodLabel) {
       btnActivePeriodLabel.addEventListener('click', () => this.toggleCustomDateDrawer());
     }
 
-    // Prev / Next Month Steppers
-    const btnPrevPeriod = document.getElementById('btnPrevPeriod');
-    const btnNextPeriod = document.getElementById('btnNextPeriod');
-    if (btnPrevPeriod) btnPrevPeriod.addEventListener('click', () => this.shiftPeriodByMonths(-1));
-    if (btnNextPeriod) btnNextPeriod.addEventListener('click', () => this.shiftPeriodByMonths(1));
+    // Period Preset Pills in Drawer
+    document.querySelectorAll('.period-pill[data-preset]').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const preset = pill.getAttribute('data-preset');
+        if (preset) this.applyPeriodPreset(preset);
+      });
+    });
 
-    // Custom Date Inputs
+    // Custom Date Range Inputs
     const startInput = document.getElementById('filterStartDate');
     const endInput = document.getElementById('filterEndDate');
     if (startInput) {
@@ -192,119 +337,49 @@ class ShiftlyApp {
       });
     }
 
-    // Action Buttons: Add Work Shift / Add Vacation
-    const fabAdd = document.getElementById('fabAddShift');
-    if (fabAdd) fabAdd.addEventListener('click', () => this.openEntryModal('work'));
-
-    const btnHeroAddShift = document.getElementById('btnHeroAddShift');
-    if (btnHeroAddShift) btnHeroAddShift.addEventListener('click', () => this.openEntryModal('work'));
-
-    const btnQuickVacation = document.getElementById('btnQuickAddVacation');
-    if (btnQuickVacation) btnQuickVacation.addEventListener('click', () => this.openEntryModal('vacation'));
-
-    const btnHeroAddVacation = document.getElementById('btnHeroAddVacation');
-    if (btnHeroAddVacation) btnHeroAddVacation.addEventListener('click', () => this.openEntryModal('vacation'));
-
-    // 1-Tap Instant Shift Templates on Dashboard
-    document.querySelectorAll('.instant-chip[data-quick-start]').forEach(chip => {
-      chip.addEventListener('click', async () => {
-        const start = chip.getAttribute('data-quick-start');
-        const end = chip.getAttribute('data-quick-end');
-        await this.quickCreateTodayShift(start, end);
+    // Sub-view Switch in History Tab (Einträge vs. Wochen)
+    document.querySelectorAll('.view-pill[data-subview]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.historySubView = btn.getAttribute('data-subview') || 'list';
+        document.querySelectorAll('.view-pill[data-subview]').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-subview') === this.historySubView);
+        });
+        const listEl = document.getElementById('allShiftsList');
+        const weeksEl = document.getElementById('dashboardWeeklyBreakdown');
+        if (listEl) listEl.hidden = this.historySubView !== 'list';
+        if (weeksEl) weeksEl.hidden = this.historySubView !== 'weeks';
       });
     });
 
-    // Modal Quick Date Offset Chips (Heute, Gestern, Vorgestern)
-    document.querySelectorAll('.micro-chip[data-date-offset]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const offset = Number(chip.getAttribute('data-date-offset')) || 0;
-        const d = new Date();
-        d.setDate(d.getDate() + offset);
-        const dateInput = document.getElementById('entryDate');
-        if (dateInput) dateInput.value = toLocalIsoDate(d);
+    // Tab 3 (Settings): Target Hours +/- Steppers & Form Submit
+    const btnTargetMinus = document.getElementById('btnTargetMinus');
+    const btnTargetPlus = document.getElementById('btnTargetPlus');
+    const targetInput = document.getElementById('settingWeeklyTarget');
+    if (btnTargetMinus && targetInput) {
+      btnTargetMinus.addEventListener('click', () => {
+        const cur = Number(targetInput.value) || 12;
+        targetInput.value = Math.max(1, cur - 0.5);
       });
-    });
-
-    // Modal Quick Time Preset Chips
-    document.querySelectorAll('.preset-chip[data-start]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const startInput = document.getElementById('shiftStart');
-        const endInput = document.getElementById('shiftEnd');
-        if (startInput) startInput.value = chip.getAttribute('data-start');
-        if (endInput) endInput.value = chip.getAttribute('data-end');
-        this.updateModalNetHours();
-      });
-    });
-
-    // Modal Quick Break Chips
-    document.querySelectorAll('.micro-chip[data-break]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const breakInput = document.getElementById('shiftBreak');
-        if (breakInput) breakInput.value = chip.getAttribute('data-break');
-        this.updateModalNetHours();
-      });
-    });
-
-    // Modal Quick Vacation Hours Chips
-    document.querySelectorAll('.micro-chip[data-vac-hours]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const vacInput = document.getElementById('vacationPaidHours');
-        if (vacInput) vacInput.value = chip.getAttribute('data-vac-hours');
-        this.updateModalNetHours();
-      });
-    });
-
-    // Entry Form Submit
-    const entryForm = document.getElementById('entryForm');
-    if (entryForm) {
-      entryForm.addEventListener('submit', (e) => this.handleEntrySubmit(e));
     }
-
-    // Modal Close
-    document.querySelectorAll('.modal-close, .modal-backdrop').forEach(el => {
-      el.addEventListener('click', (e) => {
-        if (e.target === el) this.closeModals();
-      });
-    });
-
-    // Record Type Toggle in Modal (Work vs. Vacation)
-    document.querySelectorAll('input[name="entryType"]').forEach(radio => {
-      radio.addEventListener('change', (e) => this.updateModalTypeFields(e.target.value));
-    });
-
-    // Live calculation inputs inside Modal
-    ['shiftStart', 'shiftEnd', 'shiftBreak', 'vacationPaidHours', 'entryHourlyWage'].forEach(id => {
-      const input = document.getElementById(id);
-      if (input) {
-        input.addEventListener('input', () => this.updateModalNetHours());
-      }
-    });
-
-    // Shifts Tab Filter Chips & Search
-    document.querySelectorAll('#shiftListFilterChips .filter-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('#shiftListFilterChips .filter-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        this.listFilterType = chip.getAttribute('data-filter') || 'all';
-        this.render();
-      });
-    });
-
-    const searchInput = document.getElementById('shiftSearchInput');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        this.listSearchQuery = (e.target.value || '').trim().toLowerCase();
-        this.render();
+    if (btnTargetPlus && targetInput) {
+      btnTargetPlus.addEventListener('click', () => {
+        const cur = Number(targetInput.value) || 12;
+        targetInput.value = Math.min(60, cur + 0.5);
       });
     }
 
-    // Settings Form
     const settingsForm = document.getElementById('settingsForm');
     if (settingsForm) {
       settingsForm.addEventListener('submit', (e) => this.handleSettingsSubmit(e));
     }
 
-    // Backup & Export actions
+    // Export & Backup Buttons
+    const btnPrint = document.getElementById('btnPrintTimesheet');
+    if (btnPrint) btnPrint.addEventListener('click', () => ExportService.printTimesheet());
+
+    const btnExportCsv = document.getElementById('btnExportCsv');
+    if (btnExportCsv) btnExportCsv.addEventListener('click', () => this.handleExportCsv());
+
     const btnBackup = document.getElementById('btnBackupShare');
     if (btnBackup) btnBackup.addEventListener('click', () => this.handleBackupShare());
 
@@ -314,49 +389,499 @@ class ShiftlyApp {
       btnRestore.addEventListener('click', () => fileRestore.click());
       fileRestore.addEventListener('change', (e) => this.handleRestoreFile(e));
     }
+  }
 
-    const btnExportCsv = document.getElementById('btnExportCsv');
-    if (btnExportCsv) btnExportCsv.addEventListener('click', () => this.handleExportCsv());
+  initSwipeNavigation() {
+    const viewport = document.getElementById('tabsViewport');
+    if (!viewport) return;
 
-    const btnExportCsvQuick = document.getElementById('btnExportCsvQuick');
-    if (btnExportCsvQuick) btnExportCsvQuick.addEventListener('click', () => this.handleExportCsv());
+    let startX = 0;
+    let startY = 0;
+    let isTracking = false;
 
-    const btnPrint = document.getElementById('btnPrintTimesheet');
-    if (btnPrint) btnPrint.addEventListener('click', () => ExportService.printTimesheet());
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+        isTracking = false;
+        return;
+      }
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      isTracking = true;
+    }, { passive: true });
 
-    const btnHeaderPrint = document.getElementById('btnHeaderPrint');
-    if (btnHeaderPrint) btnHeaderPrint.addEventListener('click', () => ExportService.printTimesheet());
+    viewport.addEventListener('touchend', (e) => {
+      if (!isTracking || e.changedTouches.length !== 1) return;
+      isTracking = false;
+
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        if (dx < 0 && this.activeTabIndex < 2) {
+          this.switchTabByIndex(this.activeTabIndex + 1);
+        } else if (dx > 0 && this.activeTabIndex > 0) {
+          this.switchTabByIndex(this.activeTabIndex - 1);
+        }
+      }
+    }, { passive: true });
+  }
+
+  switchTabByIndex(index) {
+    const clamped = Math.max(0, Math.min(2, index));
+    this.activeTabIndex = clamped;
+
+    const track = document.getElementById('tabsTrack');
+    if (track) {
+      track.style.transform = `translateX(-${clamped * 33.333333}%)`;
+    }
+
+    document.querySelectorAll('.nav-tab[data-index]').forEach(btn => {
+      btn.classList.toggle('active', Number(btn.getAttribute('data-index')) === clamped);
+    });
+  }
+
+  stepEntryDate(deltaDays) {
+    const dateInput = document.getElementById('entryDate');
+    if (!dateInput) return;
+    const current = new Date((dateInput.value || toLocalIsoDate()) + 'T00:00:00');
+    if (isNaN(current)) return;
+    current.setDate(current.getDate() + deltaDays);
+    dateInput.value = toLocalIsoDate(current);
+  }
+
+  setEntryType(type) {
+    this.entryType = type === 'vacation' ? 'vacation' : 'work';
+
+    document.querySelectorAll('.type-pill[data-type]').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-type') === this.entryType);
+    });
+
+    const isPlannerMode = this.entryType === 'vacation' && !this.editingRecordId;
+    const isSingleVacEdit = this.entryType === 'vacation' && Boolean(this.editingRecordId);
+
+    const workDateStepper = document.getElementById('workDateStepper');
+    const vacMonthStepper = document.getElementById('vacMonthStepper');
+    if (workDateStepper) workDateStepper.hidden = isPlannerMode;
+    if (vacMonthStepper) vacMonthStepper.hidden = !isPlannerMode;
+
+    const workFields = document.getElementById('modalWorkShiftFields');
+    const vacFields = document.getElementById('modalVacationFields');
+    const vacSingleBox = document.getElementById('vacSingleEditBox');
+    const vacPlannerBox = document.getElementById('vacPlannerBox');
+
+    if (workFields) workFields.hidden = this.entryType !== 'work';
+    if (vacFields) vacFields.hidden = this.entryType !== 'vacation';
+    if (vacSingleBox) vacSingleBox.hidden = !isSingleVacEdit;
+    if (vacPlannerBox) vacPlannerBox.hidden = !isPlannerMode;
+
+    if (isPlannerMode) {
+      this.renderVacationPlanner();
+    }
+
+    this.updateEntryLiveButton();
+  }
+
+  shiftVacCalendarMonth(deltaMonths) {
+    const d = new Date(this.vacCalYear, this.vacCalMonth + deltaMonths, 1);
+    this.vacCalYear = d.getFullYear();
+    this.vacCalMonth = d.getMonth();
+    this.renderVacationPlanner();
+  }
+
+  getDefaultDailyVacationHours() {
+    const inp = document.getElementById('vacDefaultHoursInput');
+    if (inp && inp.value !== '') {
+      const val = Number(inp.value);
+      if (!isNaN(val) && val >= 0) return val;
+    }
+    return Number((this.config.weeklyTargetHours / 5).toFixed(2)) || 2.4;
+  }
+
+  applyDefaultHoursToAllSelectedVacDays(hoursVal) {
+    for (const dateKey of this.vacSelectedDays.keys()) {
+      this.vacSelectedDays.set(dateKey, hoursVal);
+    }
+    this.renderVacationPlanner();
+    this.updateEntryLiveButton();
+  }
+
+  toggleVacationDay(isoDate) {
+    if (this.vacSelectedDays.has(isoDate)) {
+      this.vacSelectedDays.delete(isoDate);
+    } else {
+      const existingVac = this.records.find(r => r.type === 'vacation' && r.date === isoDate);
+      const hrs = existingVac ? (Number(existingVac.net_hours) || this.getDefaultDailyVacationHours()) : this.getDefaultDailyVacationHours();
+      this.vacSelectedDays.set(isoDate, hrs);
+    }
+    this.renderVacationPlanner();
+    this.updateEntryLiveButton();
+  }
+
+  fillVacationRangeWeekdays() {
+    const keys = Array.from(this.vacSelectedDays.keys()).sort();
+    if (keys.length < 2) {
+      this.showToast('💡 Erst Start- & Endtag im Kalender antippen');
+      return;
+    }
+
+    const firstIso = keys[0];
+    const lastIso = keys[keys.length - 1];
+    const cur = new Date(firstIso + 'T00:00:00');
+    const end = new Date(lastIso + 'T00:00:00');
+    const defHours = this.getDefaultDailyVacationHours();
+
+    let added = 0;
+    while (cur <= end) {
+      const dow = cur.getDay(); // 0 = Sun, 6 = Sat
+      const iso = toLocalIsoDate(cur);
+      if (dow !== 0 && dow !== 6 && !this.vacSelectedDays.has(iso)) {
+        const existingVac = this.records.find(r => r.type === 'vacation' && r.date === iso);
+        this.vacSelectedDays.set(iso, existingVac ? Number(existingVac.net_hours) : defHours);
+        added++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    this.renderVacationPlanner();
+    this.updateEntryLiveButton();
+    if (added > 0) {
+      this.showToast(`✓ ${this.vacSelectedDays.size} Werkstage im Zeitraum markiert`);
+    }
+  }
+
+  renderVacationPlanner() {
+    const labelEl = document.getElementById('vacCalMonthLabel');
+    const gridEl = document.getElementById('vacCalendarGrid');
+    const listEl = document.getElementById('vacSelectedDaysList');
+    if (!gridEl || !listEl) return;
+
+    const firstDayObj = new Date(this.vacCalYear, this.vacCalMonth, 1);
+    const daysInMonth = new Date(this.vacCalYear, this.vacCalMonth + 1, 0).getDate();
+    if (labelEl) {
+      labelEl.textContent = firstDayObj.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });
+    }
+
+    // Monday-based weekday offset (0 = Mon ... 6 = Sun)
+    const startOffset = (firstDayObj.getDay() + 6) % 7;
+    const todayIso = toLocalIsoDate(new Date());
+
+    // Build lookup of already saved vacation records
+    const savedVacMap = new Map();
+    for (const r of this.records) {
+      if (r.type === 'vacation' && r.date) {
+        savedVacMap.set(r.date, Number(r.net_hours) || 0);
+      }
+    }
+
+    let cellsHtml = '';
+    for (let i = 0; i < startOffset; i++) {
+      cellsHtml += `<div class="vac-day-cell is-empty"></div>`;
+    }
+
+    const mStr = String(this.vacCalMonth + 1).padStart(2, '0');
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dStr = String(day).padStart(2, '0');
+      const iso = `${this.vacCalYear}-${mStr}-${dStr}`;
+      const dow = (startOffset + day - 1) % 7; // 5 = Sat, 6 = Sun
+      const isWeekend = dow >= 5;
+      const isToday = iso === todayIso;
+      const isSelected = this.vacSelectedDays.has(iso);
+      const isSavedVac = savedVacMap.has(iso);
+
+      const hrs = isSelected
+        ? this.vacSelectedDays.get(iso)
+        : isSavedVac
+          ? savedVacMap.get(iso)
+          : null;
+
+      const classes = [
+        'vac-day-cell',
+        isWeekend ? 'is-weekend' : '',
+        isToday ? 'is-today' : '',
+        isSavedVac && !isSelected ? 'has-saved-vac' : '',
+        isSelected ? 'is-selected' : ''
+      ].filter(Boolean).join(' ');
+
+      const hrsBadge = hrs !== null ? `<span class="vac-day-hrs">${hrs}h</span>` : '';
+
+      cellsHtml += `
+        <button type="button" class="${classes}" data-vac-date="${iso}">
+          <span class="vac-day-num">${day}</span>
+          ${hrsBadge}
+        </button>
+      `;
+    }
+
+    gridEl.innerHTML = cellsHtml;
+    gridEl.querySelectorAll('.vac-day-cell[data-vac-date]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const iso = btn.getAttribute('data-vac-date');
+        if (iso) this.toggleVacationDay(iso);
+      });
+    });
+
+    // Render Selected Days Individual Hours List
+    const sortedDates = Array.from(this.vacSelectedDays.keys()).sort();
+    if (sortedDates.length === 0) {
+      listEl.innerHTML = `<div class="vac-selected-empty">Urlaubstage oben im Kalender antippen (oder Start- & Endtag wählen und „↔ Zeitraum“ klicken).</div>`;
+      return;
+    }
+
+    listEl.innerHTML = sortedDates.map(iso => {
+      const hrs = this.vacSelectedDays.get(iso) ?? 0;
+      const dObj = new Date(iso + 'T00:00:00');
+      const label = isNaN(dObj) ? iso : dateFormatter.format(dObj);
+      return `
+        <div class="vac-day-row" data-row-date="${iso}">
+          <span class="vac-day-row-date">🌴 ${label}</span>
+          <div class="vac-day-row-controls">
+            <button type="button" class="vac-row-step-btn" data-step="-0.5" data-date="${iso}">−</button>
+            <input type="number" step="0.25" min="0" max="24" class="vac-row-hours-input" data-date="${iso}" value="${hrs}">
+            <span class="vac-row-unit">h</span>
+            <button type="button" class="vac-row-step-btn" data-step="0.5" data-date="${iso}">+</button>
+            <button type="button" class="vac-row-remove-btn" data-remove-date="${iso}" title="Entfernen">✕</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.vac-row-step-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const iso = btn.getAttribute('data-date');
+        const delta = Number(btn.getAttribute('data-step')) || 0;
+        if (!iso || !this.vacSelectedDays.has(iso)) return;
+        const nextVal = Math.max(0, Math.min(24, Number(((this.vacSelectedDays.get(iso) || 0) + delta).toFixed(2))));
+        this.vacSelectedDays.set(iso, nextVal);
+        this.renderVacationPlanner();
+        this.updateEntryLiveButton();
+      });
+    });
+
+    listEl.querySelectorAll('.vac-row-hours-input').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const iso = inp.getAttribute('data-date');
+        if (!iso || !this.vacSelectedDays.has(iso)) return;
+        const val = Math.max(0, Math.min(24, Number(inp.value) || 0));
+        this.vacSelectedDays.set(iso, val);
+        this.renderVacationPlanner();
+        this.updateEntryLiveButton();
+      });
+    });
+
+    listEl.querySelectorAll('.vac-row-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const iso = btn.getAttribute('data-remove-date');
+        if (iso) {
+          this.vacSelectedDays.delete(iso);
+          this.renderVacationPlanner();
+          this.updateEntryLiveButton();
+        }
+      });
+    });
+  }
+
+  syncBreakPillsUI(minutes) {
+    document.querySelectorAll('.break-pill[data-break]').forEach(pill => {
+      pill.classList.toggle('active', Number(pill.getAttribute('data-break')) === Number(minutes));
+    });
+  }
+
+  resetEntryFormToDefaults() {
+    this.editingRecordId = null;
+
+    const banner = document.getElementById('editModeBanner');
+    if (banner) banner.hidden = true;
+
+    const now = new Date();
+    this.vacCalYear = now.getFullYear();
+    this.vacCalMonth = now.getMonth();
+    this.vacSelectedDays.clear();
+
+    const dateInput = document.getElementById('entryDate');
+    const breakInput = document.getElementById('shiftBreak');
+    const vacHoursInput = document.getElementById('vacationPaidHours');
+    const vacDefInput = document.getElementById('vacDefaultHoursInput');
+    const noteInput = document.getElementById('entryNote');
+
+    const defaultVacHours = Number((this.config.weeklyTargetHours / 5).toFixed(2)) || 2.4;
+
+    if (dateInput) dateInput.value = toLocalIsoDate(now);
+    this.set24hSelectFromTimeStr('shiftStart', '08:00');
+    this.set24hSelectFromTimeStr('shiftEnd', '12:00');
+    if (breakInput) breakInput.value = this.config.defaultBreak;
+    if (vacHoursInput) vacHoursInput.value = defaultVacHours;
+    if (vacDefInput) vacDefInput.value = defaultVacHours;
+    if (noteInput) noteInput.value = '';
+
+    this.syncBreakPillsUI(this.config.defaultBreak);
+    this.setEntryType('work');
+    this.updateEntryLiveButton();
+  }
+
+  loadRecordIntoEntryForm(recordId) {
+    const rec = this.records.find(r => r.id === recordId);
+    if (!rec) return;
+
+    this.editingRecordId = rec.id;
+
+    const banner = document.getElementById('editModeBanner');
+    if (banner) banner.hidden = false;
+
+    const dateInput = document.getElementById('entryDate');
+    const breakInput = document.getElementById('shiftBreak');
+    const vacHoursInput = document.getElementById('vacationPaidHours');
+    const noteInput = document.getElementById('entryNote');
+
+    if (dateInput) dateInput.value = rec.date;
+    this.set24hSelectFromTimeStr('shiftStart', rec.start_time || '08:00');
+    this.set24hSelectFromTimeStr('shiftEnd', rec.end_time || '12:00');
+    if (breakInput) breakInput.value = rec.break_minutes ?? 0;
+    if (vacHoursInput) vacHoursInput.value = rec.net_hours ?? 2.4;
+    if (noteInput) noteInput.value = rec.note || '';
+
+    this.syncBreakPillsUI(rec.break_minutes ?? 0);
+    this.setEntryType(rec.type || 'work');
+    this.updateEntryLiveButton();
+    this.switchTabByIndex(0);
+  }
+
+  updateEntryLiveButton() {
+    const btn = document.getElementById('btnSubmitEntry');
+    if (!btn) return;
+
+    if (this.entryType === 'vacation' && !this.editingRecordId) {
+      const dayCount = this.vacSelectedDays.size;
+      let totalHours = 0;
+      for (const h of this.vacSelectedDays.values()) {
+        totalHours += Number(h) || 0;
+      }
+      totalHours = Math.round(totalHours * 100) / 100;
+      if (dayCount === 0) {
+        btn.textContent = '🌴 Urlaubstage im Kalender wählen';
+      } else {
+        const dayWord = dayCount === 1 ? 'Tag' : 'Tage';
+        btn.textContent = `+ 🌴 ${dayCount} ${dayWord} (${TimeEngine.formatHoursPretty(totalHours)}) speichern`;
+      }
+      return;
+    }
+
+    let hours = 0;
+    if (this.entryType === 'vacation') {
+      hours = Number(document.getElementById('vacationPaidHours')?.value) || 0;
+    } else {
+      const start = document.getElementById('shiftStart')?.value;
+      const end = document.getElementById('shiftEnd')?.value;
+      const breakMin = document.getElementById('shiftBreak')?.value || 0;
+      hours = TimeEngine.calculateNetHours(start, end, breakMin);
+    }
+
+    const formatted = TimeEngine.formatHoursPretty(hours);
+    if (this.editingRecordId) {
+      btn.textContent = `✓ ${formatted} speichern`;
+    } else {
+      btn.textContent = `+ ${formatted} eintragen`;
+    }
+  }
+
+  async handleEntrySubmit(e) {
+    e.preventDefault();
+    const note = (document.getElementById('entryNote').value || '').trim();
+
+    // Multi-Day Vacation Planner Batch Save
+    if (this.entryType === 'vacation' && !this.editingRecordId) {
+      if (this.vacSelectedDays.size === 0) {
+        this.showToast('⚠️ Bitte mindestens einen Urlaubstag im Kalender antippen');
+        return;
+      }
+
+      const sortedDates = Array.from(this.vacSelectedDays.keys()).sort();
+      let totalSavedHours = 0;
+
+      for (const isoDate of sortedDates) {
+        const netHours = Number(this.vacSelectedDays.get(isoDate)) || 0;
+        totalSavedHours += netHours;
+
+        // Overwrite existing vacation record on the same date if present
+        const existingVac = this.records.find(r => r.type === 'vacation' && r.date === isoDate);
+        await db.saveRecord({
+          id: existingVac ? existingVac.id : undefined,
+          type: 'vacation',
+          date: isoDate,
+          year_month: isoDate.substring(0, 7),
+          start_time: '',
+          end_time: '',
+          break_minutes: 0,
+          net_hours: netHours,
+          note
+        });
+      }
+
+      const count = sortedDates.length;
+      await this.loadRecords();
+      this.vacSelectedDays.clear();
+      if (document.getElementById('entryNote')) document.getElementById('entryNote').value = '';
+      this.render();
+      this.renderVacationPlanner();
+      this.updateEntryLiveButton();
+      this.showToast(`🌴 ${count} Urlaubstag${count === 1 ? '' : 'e'} (${TimeEngine.formatHoursPretty(totalSavedHours)}) gespeichert`);
+      return;
+    }
+
+    const date = document.getElementById('entryDate').value;
+    let netHours = 0;
+    let startTime = '';
+    let endTime = '';
+    let breakMinutes = 0;
+
+    if (this.entryType === 'vacation') {
+      netHours = Number(document.getElementById('vacationPaidHours').value) || 0;
+    } else {
+      startTime = document.getElementById('shiftStart').value;
+      endTime = document.getElementById('shiftEnd').value;
+      breakMinutes = Number(document.getElementById('shiftBreak').value) || 0;
+      netHours = TimeEngine.calculateNetHours(startTime, endTime, breakMinutes);
+    }
+
+    const isEdit = Boolean(this.editingRecordId);
+
+    const recordData = {
+      id: this.editingRecordId || undefined,
+      type: this.entryType,
+      date,
+      year_month: date.substring(0, 7),
+      start_time: startTime,
+      end_time: endTime,
+      break_minutes: breakMinutes,
+      net_hours: netHours,
+      note
+    };
+
+    await db.saveRecord(recordData);
+    await this.loadRecords();
+    this.resetEntryFormToDefaults();
+    this.render();
+    this.showToast(isEdit ? '✓ Änderungen gespeichert' : `✓ ${TimeEngine.formatHoursPretty(netHours)} eingetragen`);
   }
 
   toggleCustomDateDrawer(forceState) {
     const drawer = document.getElementById('customDatesDrawer');
     if (!drawer) return;
-    const isHidden = drawer.hasAttribute('hidden');
-    const shouldOpen = typeof forceState === 'boolean' ? forceState : isHidden;
-    if (shouldOpen) {
-      drawer.removeAttribute('hidden');
-    } else {
-      drawer.setAttribute('hidden', '');
-    }
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : drawer.hasAttribute('hidden');
+    drawer.hidden = !shouldOpen;
   }
 
   shiftPeriodByMonths(deltaMonths) {
     const startObj = new Date(this.startDate + 'T00:00:00');
     if (isNaN(startObj)) return;
 
-    const targetYear = startObj.getFullYear();
-    const targetMonth = startObj.getMonth() + deltaMonths;
-    const firstDay = new Date(targetYear, targetMonth, 1);
-    const lastDay = new Date(targetYear, targetMonth + 1, 0);
+    const firstDay = new Date(startObj.getFullYear(), startObj.getMonth() + deltaMonths, 1);
+    const lastDay = new Date(startObj.getFullYear(), startObj.getMonth() + deltaMonths + 1, 0);
 
     this.startDate = toLocalIsoDate(firstDay);
     this.endDate = toLocalIsoDate(lastDay);
     this.activePreset = 'custom';
-
-    const startInput = document.getElementById('filterStartDate');
-    const endInput = document.getElementById('filterEndDate');
-    if (startInput) startInput.value = this.startDate;
-    if (endInput) endInput.value = this.endDate;
 
     this.updatePeriodPillsUI();
     this.render();
@@ -372,13 +897,6 @@ class ShiftlyApp {
       const lastDay = new Date(y, m + 1, 0).getDate();
       this.startDate = `${y}-${String(m + 1).padStart(2, '0')}-01`;
       this.endDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    } else if (presetKey === 'last_month') {
-      const prevDate = new Date(y, m, 0);
-      const py = prevDate.getFullYear();
-      const pm = prevDate.getMonth() + 1;
-      const lastDay = prevDate.getDate();
-      this.startDate = `${py}-${String(pm).padStart(2, '0')}-01`;
-      this.endDate = `${py}-${String(pm).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     } else if (presetKey === 'period_26_to_25') {
       let prevM = m;
       let prevY = y;
@@ -396,11 +914,6 @@ class ShiftlyApp {
       this.endDate = `${y}-12-31`;
     }
 
-    const startInput = document.getElementById('filterStartDate');
-    const endInput = document.getElementById('filterEndDate');
-    if (startInput) startInput.value = this.startDate;
-    if (endInput) endInput.value = this.endDate;
-
     this.toggleCustomDateDrawer(false);
     this.updatePeriodPillsUI();
     this.render();
@@ -408,114 +921,21 @@ class ShiftlyApp {
 
   updatePeriodPillsUI() {
     document.querySelectorAll('.period-pill[data-preset]').forEach(pill => {
-      const key = pill.getAttribute('data-preset');
-      pill.classList.toggle('active', key === this.activePreset);
+      pill.classList.toggle('active', pill.getAttribute('data-preset') === this.activePreset);
     });
-  }
-
-  async quickCreateTodayShift(startTime, endTime) {
-    const todayStr = toLocalIsoDate(new Date());
-    const breakMinutes = this.config.defaultBreak || 0;
-    const netHours = TimeEngine.calculateNetHours(startTime, endTime, breakMinutes);
-    const earnings = TimeEngine.calculateEarnings(netHours, this.config.hourlyRate);
-
-    const recordData = {
-      type: 'work',
-      date: todayStr,
-      year_month: todayStr.substring(0, 7),
-      start_time: startTime,
-      end_time: endTime,
-      break_minutes: breakMinutes,
-      net_hours: netHours,
-      hourly_rate: this.config.hourlyRate,
-      earnings,
-      note: ''
-    };
-
-    await db.saveRecord(recordData);
-    await this.loadRecords();
-    this.render();
-    this.showToast(`⚡ Schicht heute (${startTime}–${endTime} · ${TimeEngine.formatHoursPretty(netHours)}) gespeichert!`);
-  }
-
-  switchTab(tabId) {
-    this.activeTab = tabId;
-    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.bottom-nav-btn[data-tab]').forEach(el => el.classList.remove('active'));
-
-    const targetPane = document.getElementById(`tab-${tabId}`);
-    if (targetPane) targetPane.classList.add('active');
-
-    const activeBtn = document.querySelector(`.bottom-nav-btn[data-tab="${tabId}"]`);
-    if (activeBtn) activeBtn.classList.add('active');
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    this.render();
   }
 
   render() {
     const agg = TimeEngine.aggregateDateRange(this.records, this.startDate, this.endDate, this.config);
     const lifetimeOvertime = TimeEngine.calculateLifetimeOvertime(this.records, this.config);
 
-    this.renderHeader();
-
-    if (this.activeTab === 'dashboard') {
-      this.renderDashboard(agg, lifetimeOvertime);
-    } else if (this.activeTab === 'shifts') {
-      this.renderShiftsList(agg);
-    } else if (this.activeTab === 'settings') {
-      this.renderSettings();
-    }
-
+    this.renderStatusStrip(agg, lifetimeOvertime);
+    this.renderHistoryTab(agg);
+    this.renderSettingsTab();
     this.renderPrintTimesheet(agg, lifetimeOvertime);
   }
 
-  renderHeader() {
-    const startInput = document.getElementById('filterStartDate');
-    const endInput = document.getElementById('filterEndDate');
-    if (startInput) startInput.value = this.startDate;
-    if (endInput) endInput.value = this.endDate;
-
-    // Friendly Greeting
-    const greetingEl = document.getElementById('brandGreeting');
-    if (greetingEl) {
-      const hour = new Date().getHours();
-      let greet = 'Hallo';
-      if (hour < 11) greet = 'Guten Morgen';
-      else if (hour < 18) greet = 'Guten Tag';
-      else greet = 'Guten Abend';
-      const firstName = this.config.userName ? `, ${this.config.userName.split(' ')[0]}` : '';
-      greetingEl.textContent = `${greet}${firstName}! 👋`;
-    }
-
-    // Today label in Quick Launcher
-    const todayLabel = document.getElementById('todayQuickLabel');
-    if (todayLabel) {
-      todayLabel.textContent = todayBannerFormatter.format(new Date());
-    }
-
-    // Active Period Summary Text
-    const periodTextEl = document.getElementById('activePeriodText');
-    if (periodTextEl) {
-      const s = new Date(this.startDate + 'T00:00:00');
-      const e = new Date(this.endDate + 'T00:00:00');
-      if (!isNaN(s) && !isNaN(e)) {
-        // Check if it's a full single calendar month
-        const isFirstDay = s.getDate() === 1;
-        const lastOfSMonth = new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate();
-        const isSameMonth = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && e.getDate() === lastOfSMonth;
-        if (isFirstDay && isSameMonth) {
-          periodTextEl.textContent = s.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
-        } else {
-          periodTextEl.textContent = `${shortDateFormatter.format(s)} – ${shortDateFormatter.format(e)}`;
-        }
-      } else {
-        periodTextEl.textContent = `${this.startDate} – ${this.endDate}`;
-      }
-    }
-  }
-
-  renderCurrentWeekSpotlight() {
+  renderStatusStrip(agg, lifetimeOvertime) {
     const todayIso = toLocalIsoDate(new Date());
     const currentWeekKey = TimeEngine.getIsoWeek(todayIso);
     const kwNumber = currentWeekKey.split('-W')[1] || '';
@@ -527,281 +947,185 @@ class ShiftlyApp {
       }
     }
     weekHours = Math.round(weekHours * 100) / 100;
+    const targetH = this.config.weeklyTargetHours || 12;
 
-    const minH = this.config.weeklyHoursMin || 10;
-    const maxH = this.config.weeklyHoursMax || 15;
-    const scaleMax = Math.max(maxH * 1.35, weekHours * 1.1, 20);
+    const weekLabel = document.getElementById('statWeekLabel');
+    const weekHoursEl = document.getElementById('statWeekHours');
+    const weekBarEl = document.getElementById('statWeekBar');
+    const monthHoursEl = document.getElementById('statMonthHours');
+    const overtimeEl = document.getElementById('statOvertime');
+    const vacHintEl = document.getElementById('vacationRemainingHint');
 
-    const titleEl = document.getElementById('currentWeekTitle');
-    const hoursEl = document.getElementById('currentWeekHours');
-    const badgeEl = document.getElementById('currentWeekBadge');
-    const fillEl = document.getElementById('currentWeekMeterFill');
-    const zoneEl = document.getElementById('corridorZoneMarker');
-    const minLabel = document.getElementById('corridorMinLabel');
-    const maxLabel = document.getElementById('corridorMaxLabel');
-    const hintEl = document.getElementById('currentWeekHint');
+    if (weekLabel) weekLabel.textContent = `Woche (KW ${kwNumber})`;
+    if (weekHoursEl) weekHoursEl.textContent = `${TimeEngine.formatHoursPretty(weekHours)} / ${targetH} h`;
 
-    if (titleEl) titleEl.textContent = `DIESE WOCHE (KW ${kwNumber})`;
-    if (hoursEl) hoursEl.textContent = TimeEngine.formatHoursPretty(weekHours);
-    if (minLabel) minLabel.textContent = `Min: ${minH} h`;
-    if (maxLabel) maxLabel.textContent = `Max: ${maxH} h`;
-
-    if (zoneEl) {
-      const leftPct = Math.min(100, Math.round((minH / scaleMax) * 100));
-      const widthPct = Math.min(100 - leftPct, Math.round(((maxH - minH) / scaleMax) * 100));
-      zoneEl.style.left = `${leftPct}%`;
-      zoneEl.style.width = `${widthPct}%`;
+    if (weekBarEl) {
+      const pct = Math.min(100, Math.round((weekHours / targetH) * 100));
+      weekBarEl.style.width = `${pct}%`;
+      weekBarEl.classList.toggle('done', weekHours >= targetH);
     }
 
-    if (fillEl) {
-      const fillPct = Math.min(100, Math.round((weekHours / scaleMax) * 100));
-      fillEl.style.width = `${fillPct}%`;
-    }
+    if (monthHoursEl) monthHoursEl.textContent = TimeEngine.formatHoursPretty(agg.totalHours);
 
-    if (badgeEl && hintEl) {
-      if (weekHours < minH) {
-        const missing = Math.round((minH - weekHours) * 100) / 100;
-        badgeEl.className = 'spotlight-badge status-under';
-        badgeEl.textContent = `Offen: ${TimeEngine.formatHoursPretty(missing)}`;
-        hintEl.textContent = `Noch ${TimeEngine.formatHoursPretty(missing)} bis zum Wochen-Minimum (${minH}–${maxH} Std.).`;
-      } else if (weekHours <= maxH) {
-        badgeEl.className = 'spotlight-badge status-good';
-        badgeEl.textContent = '✓ Im grünen Bereich';
-        hintEl.textContent = `Stark! Du liegst perfekt im vereinbarten Wochenkorridor (${minH}–${maxH} Std.).`;
-      } else {
-        const extra = Math.round((weekHours - maxH) * 100) / 100;
-        badgeEl.className = 'spotlight-badge status-over';
-        badgeEl.textContent = `+${TimeEngine.formatHoursPretty(extra)} Überstunden`;
-        hintEl.textContent = `Du hast diese Woche ${TimeEngine.formatHoursPretty(extra)} über dem Maximum (${maxH} Std.) gearbeitet.`;
-      }
-    }
-  }
-
-  renderDashboard(agg, lifetimeOvertime) {
-    this.renderCurrentWeekSpotlight();
-
-    // Total Hours
-    const totalHoursEl = document.getElementById('kpiTotalHours');
-    const totalHoursSub = document.getElementById('kpiTotalHoursSub');
-    if (totalHoursEl) totalHoursEl.textContent = TimeEngine.formatHoursPretty(agg.totalHours);
-    if (totalHoursSub) {
-      totalHoursSub.textContent = `Arbeit: ${TimeEngine.formatHoursPretty(agg.totalWorkHours)} · Urlaub: ${TimeEngine.formatHoursPretty(agg.totalVacationHours)}`;
-    }
-
-    // Earnings
-    const earningsEl = document.getElementById('kpiTotalEarnings');
-    const earningsSub = document.getElementById('kpiEarningsSub');
-    if (earningsEl) earningsEl.textContent = currencyFormatter.format(agg.totalEarnings);
-    if (earningsSub) {
-      earningsSub.textContent = `Ø ${currencyFormatter.format(this.config.hourlyRate)} / Std.`;
-    }
-
-    // Overtime Saldo (Lifetime & Period)
-    const overtimeEl = document.getElementById('kpiOvertimeBalance');
-    const overtimeSub = document.getElementById('kpiOvertimeSub');
     if (overtimeEl) {
       const sign = lifetimeOvertime > 0 ? '+' : '';
       overtimeEl.textContent = `${sign}${TimeEngine.formatHoursPretty(lifetimeOvertime)}`;
-      overtimeEl.className = lifetimeOvertime > 0 ? 'kpi-value text-emerald' : lifetimeOvertime < 0 ? 'kpi-value text-rose' : 'kpi-value';
-    }
-    if (overtimeSub) {
-      const pSign = agg.periodOvertimeDelta > 0 ? '+' : '';
-      overtimeSub.textContent = `Im Zeitraum: ${pSign}${TimeEngine.formatHoursPretty(agg.periodOvertimeDelta)}`;
-    }
-
-    // Vacation KPI
-    const vacRemainingEl = document.getElementById('kpiVacationRemaining');
-    const vacSubEl = document.getElementById('kpiVacationSub');
-    if (vacRemainingEl) {
-      vacRemainingEl.textContent = `${agg.vacationDaysRemaining} Tage`;
-    }
-    if (vacSubEl) {
-      vacSubEl.textContent = `${agg.vacationDaysTakenYear} von ${agg.totalVacationDays} Tagen genutzt`;
+      overtimeEl.className = lifetimeOvertime > 0
+        ? 'status-value text-emerald'
+        : lifetimeOvertime < 0
+          ? 'status-value text-rose'
+          : 'status-value';
     }
 
-    const corridorPill = document.getElementById('weeklyCorridorInfoPill');
-    if (corridorPill) {
-      corridorPill.textContent = `Soll: ${this.config.weeklyHoursMin}–${this.config.weeklyHoursMax} h`;
+    if (vacHintEl) {
+      vacHintEl.textContent = `${agg.vacationDaysRemaining} / ${agg.totalVacationDays} T. frei`;
+    }
+  }
+
+  renderHistoryTab(agg) {
+    const startInput = document.getElementById('filterStartDate');
+    const endInput = document.getElementById('filterEndDate');
+    if (startInput) startInput.value = this.startDate;
+    if (endInput) endInput.value = this.endDate;
+
+    const periodTextEl = document.getElementById('activePeriodText');
+    if (periodTextEl) {
+      const s = new Date(this.startDate + 'T00:00:00');
+      const e = new Date(this.endDate + 'T00:00:00');
+      if (!isNaN(s) && !isNaN(e)) {
+        const isFirstDay = s.getDate() === 1;
+        const lastOfSMonth = new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate();
+        const isSameMonth = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && e.getDate() === lastOfSMonth;
+        if (isFirstDay && isSameMonth) {
+          periodTextEl.textContent = s.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+        } else {
+          periodTextEl.textContent = `${shortDateFormatter.format(s)} – ${shortDateFormatter.format(e)}`;
+        }
+      }
     }
 
-    // Weekly corridor breakdown list
-    const weeklyListEl = document.getElementById('dashboardWeeklyBreakdown');
-    if (weeklyListEl) {
-      if (agg.weeklyDetails.length === 0) {
-        weeklyListEl.innerHTML = `<div class="empty-state">Noch keine Wochen-Daten im gewählten Zeitraum.</div>`;
+    const histTotal = document.getElementById('histTotalHours');
+    const histTarget = document.getElementById('histTargetInfo');
+    const histVac = document.getElementById('histVacationInfo');
+
+    if (histTotal) histTotal.textContent = TimeEngine.formatHoursPretty(agg.totalHours);
+    if (histTarget) histTarget.textContent = `${this.config.weeklyTargetHours} h/Wo.`;
+    if (histVac) histVac.textContent = `${agg.vacationDaysRemaining} T. frei`;
+
+    // Entries List
+    const listContainer = document.getElementById('allShiftsList');
+    if (listContainer) {
+      const reversed = agg.records.slice().reverse();
+      if (reversed.length === 0) {
+        listContainer.innerHTML = `<div class="empty-state">Keine Einträge in diesem Zeitraum.</div>`;
       } else {
-        const maxBarRef = Math.max(this.config.weeklyHoursMax * 1.25, 18);
-        weeklyListEl.innerHTML = agg.weeklyDetails.map(w => {
-          const deltaSign = w.delta > 0 ? '+' : '';
-          const deltaClass = w.delta > 0 ? 'text-emerald' : w.delta < 0 ? 'text-rose' : 'text-muted';
-          const statusText = w.delta === 0
-            ? `✓ Im Korridor (${this.config.weeklyHoursMin}–${this.config.weeklyHoursMax} h)`
-            : `${deltaSign}${TimeEngine.formatHoursPretty(w.delta)}`;
-          const pct = Math.min(100, Math.round((w.hours / maxBarRef) * 100));
-          const barState = w.delta === 0 ? 'good' : w.delta < 0 ? 'under' : '';
+        listContainer.innerHTML = reversed.map(r => {
+          const isVac = r.type === 'vacation';
+          const dObj = new Date(r.date + 'T00:00:00');
+          const dStr = isNaN(dObj) ? r.date : dateFormatter.format(dObj);
+          const timeInfo = isVac
+            ? '🌴 Urlaubstag'
+            : `${r.start_time || '—'} – ${r.end_time || '—'}${r.break_minutes ? ` (-${r.break_minutes}m)` : ''}`;
+          const notePart = r.note ? ` · ${escapeHtml(r.note)}` : '';
+
           return `
-            <div class="weekly-row">
-              <div class="weekly-row-top">
-                <div>
-                  <span class="weekly-kw-badge">KW ${w.week.split('-W')[1]}</span>
-                  <span class="text-muted" style="font-size: 0.76rem; margin-left: 0.45rem;">${w.recordCount} ${w.recordCount === 1 ? 'Eintrag' : 'Einträge'}</span>
-                </div>
-                <div style="text-align: right;">
-                  <span style="font-weight: 800; font-size: 0.9rem;">${TimeEngine.formatHoursPretty(w.hours)}</span>
-                  <span class="${deltaClass}" style="font-size: 0.75rem; font-weight: 700; margin-left: 0.4rem;">${statusText}</span>
+            <div class="shift-item ${isVac ? 'is-vacation' : ''}">
+              <div class="shift-item-left">
+                <div class="shift-item-date">${dStr}</div>
+                <div class="shift-item-meta">${timeInfo}${notePart}</div>
+              </div>
+              <div class="shift-item-right">
+                <span class="shift-hours-badge">${TimeEngine.formatHoursPretty(r.net_hours)}</span>
+                <button type="button" class="icon-action-btn btn-edit-record" data-id="${r.id}" aria-label="Bearbeiten">✏️</button>
+                <button type="button" class="icon-action-btn btn-delete-record" data-id="${r.id}" aria-label="Löschen">🗑️</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        listContainer.querySelectorAll('.btn-edit-record').forEach(btn => {
+          btn.addEventListener('click', () => this.loadRecordIntoEntryForm(btn.getAttribute('data-id')));
+        });
+
+        listContainer.querySelectorAll('.btn-delete-record').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            if (confirm('Eintrag wirklich löschen?')) {
+              await db.deleteRecord(id);
+              await this.loadRecords();
+              this.render();
+              this.showToast('🗑️ Gelöscht');
+            }
+          });
+        });
+      }
+    }
+
+    // Weeks List
+    const weeksContainer = document.getElementById('dashboardWeeklyBreakdown');
+    if (weeksContainer) {
+      if (agg.weeklyDetails.length === 0) {
+        weeksContainer.innerHTML = `<div class="empty-state">Keine Wochen im Zeitraum.</div>`;
+      } else {
+        const target = this.config.weeklyTargetHours || 12;
+        weeksContainer.innerHTML = agg.weeklyDetails.slice().reverse().map(w => {
+          const sign = w.delta > 0 ? '+' : '';
+          const deltaClass = w.delta > 0 ? 'delta-pos' : w.delta < 0 ? 'delta-neg' : 'delta-zero';
+          const pct = Math.min(100, Math.round((w.hours / target) * 100));
+
+          return `
+            <div class="week-item">
+              <div class="week-item-top">
+                <span class="week-kw">KW ${w.week.split('-W')[1]}</span>
+                <div class="week-hours-delta">
+                  <span>${TimeEngine.formatHoursPretty(w.hours)} / ${target} h</span>
+                  <span class="delta-pill ${deltaClass}">${sign}${TimeEngine.formatHoursPretty(w.delta)}</span>
                 </div>
               </div>
-              <div class="weekly-mini-bar">
-                <div class="weekly-mini-fill ${barState}" style="width: ${pct}%;"></div>
+              <div class="mini-progress">
+                <div class="mini-progress-fill ${w.hours >= target ? 'done' : ''}" style="width: ${pct}%;"></div>
               </div>
             </div>
           `;
         }).join('');
       }
     }
-
-    // Recent entries
-    const recentList = document.getElementById('dashboardRecentShifts');
-    if (recentList) {
-      if (agg.records.length === 0) {
-        recentList.innerHTML = `<div class="empty-state">Noch keine Einträge im Zeitraum — nutze oben den Schnell-Eintrag! ✨</div>`;
-      } else {
-        recentList.innerHTML = agg.records.slice(-5).reverse().map(r => this.renderRecordItemHtml(r)).join('');
-        this.bindRecordActionButtons(recentList);
-      }
-    }
   }
 
-  renderShiftsList(agg) {
-    const listContainer = document.getElementById('allShiftsList');
-    const countHeader = document.getElementById('shiftsCountHeader');
-    if (!listContainer) return;
-
-    let filtered = agg.records.slice().reverse();
-    if (this.listFilterType !== 'all') {
-      filtered = filtered.filter(r => (r.type || 'work') === this.listFilterType);
-    }
-    if (this.listSearchQuery) {
-      filtered = filtered.filter(r => {
-        const noteMatch = (r.note || '').toLowerCase().includes(this.listSearchQuery);
-        const dateMatch = (r.date || '').toLowerCase().includes(this.listSearchQuery);
-        return noteMatch || dateMatch;
-      });
-    }
-
-    if (countHeader) {
-      countHeader.textContent = `${filtered.length} ${filtered.length === 1 ? 'Eintrag' : 'Einträge'} gefunden`;
-    }
-
-    if (filtered.length === 0) {
-      listContainer.innerHTML = `<div class="empty-state">Keine passenden Einträge im gewählten Zeitraum gefunden.</div>`;
-    } else {
-      listContainer.innerHTML = filtered.map(r => this.renderRecordItemHtml(r)).join('');
-      this.bindRecordActionButtons(listContainer);
-    }
-  }
-
-  renderRecordItemHtml(record) {
-    const isVacation = record.type === 'vacation';
-    const dateObj = new Date(record.date + 'T00:00:00');
-    const dateFormatted = isNaN(dateObj) ? record.date : dateFormatter.format(dateObj);
-
-    return `
-      <div class="shift-card ${isVacation ? 'card-vacation' : ''}" data-id="${record.id}">
-        <div class="shift-card-header">
-          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-            <span class="badge ${isVacation ? 'badge-vacation' : 'badge-work'}">${isVacation ? '🌴 Urlaub' : '⏱️ Arbeit'}</span>
-            <span class="shift-date">${dateFormatted}</span>
-          </div>
-          <span class="shift-earnings">${currencyFormatter.format(record.earnings)}</span>
-        </div>
-        <div class="shift-card-details">
-          ${isVacation
-            ? `<span>Angerechnete Zeit:</span> <span class="shift-duration-pill">${TimeEngine.formatHoursPretty(record.net_hours)}</span>`
-            : `<span>🕒 ${record.start_time || '—'} – ${record.end_time || '—'} Uhr</span>
-               <span class="shift-duration-pill">${TimeEngine.formatHoursPretty(record.net_hours)}</span>
-               ${record.break_minutes ? `<span style="color: var(--text-muted); font-size: 0.76rem;">(${record.break_minutes} Min. Pause)</span>` : ''}`
-          }
-        </div>
-        ${record.note ? `<div class="shift-note">📝 ${escapeHtml(record.note)}</div>` : ''}
-        <div class="shift-actions">
-          <button type="button" class="btn btn-sm btn-ghost btn-duplicate-record" data-id="${record.id}" title="Auf heute kopieren">📋 Kopieren</button>
-          <button type="button" class="btn btn-sm btn-ghost btn-edit-record" data-id="${record.id}">✏️ Bearbeiten</button>
-          <button type="button" class="btn btn-sm btn-ghost text-rose btn-delete-record" data-id="${record.id}">🗑️ Löschen</button>
-        </div>
-      </div>
-    `;
-  }
-
-  bindRecordActionButtons(container) {
-    container.querySelectorAll('.btn-duplicate-record').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        this.duplicateRecordToToday(id);
-      });
-    });
-
-    container.querySelectorAll('.btn-edit-record').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        this.openEntryModal(null, id);
-      });
-    });
-
-    container.querySelectorAll('.btn-delete-record').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-id');
-        if (confirm('Diesen Eintrag wirklich löschen?')) {
-          await db.deleteRecord(id);
-          await this.loadRecords();
-          this.render();
-          this.showToast('🗑️ Eintrag gelöscht');
-        }
-      });
-    });
-  }
-
-  duplicateRecordToToday(recordId) {
-    const rec = this.records.find(r => r.id === recordId);
-    if (!rec) return;
-    this.openEntryModal(rec.type || 'work', null);
-
-    const dateInput = document.getElementById('entryDate');
-    const startInput = document.getElementById('shiftStart');
-    const endInput = document.getElementById('shiftEnd');
-    const breakInput = document.getElementById('shiftBreak');
-    const vacHoursInput = document.getElementById('vacationPaidHours');
-    const wageInput = document.getElementById('entryHourlyWage');
-    const noteInput = document.getElementById('entryNote');
-
-    if (dateInput) dateInput.value = toLocalIsoDate(new Date());
-    if (startInput) startInput.value = rec.start_time || '08:00';
-    if (endInput) endInput.value = rec.end_time || '12:00';
-    if (breakInput) breakInput.value = rec.break_minutes ?? 0;
-    if (vacHoursInput) vacHoursInput.value = rec.net_hours ?? 2.5;
-    if (wageInput) wageInput.value = rec.hourly_rate ?? this.config.hourlyRate;
-    if (noteInput) noteInput.value = rec.note || '';
-
-    this.updateModalNetHours();
-    this.showToast('📋 Vorlage für heute geladen — nur noch speichern!');
-  }
-
-  renderSettings() {
-    const minHInput = document.getElementById('settingWeeklyMin');
-    const maxHInput = document.getElementById('settingWeeklyMax');
-    const wageInput = document.getElementById('settingHourlyRate');
+  renderSettingsTab() {
+    const targetInput = document.getElementById('settingWeeklyTarget');
     const breakInput = document.getElementById('settingDefaultBreak');
     const vacInput = document.getElementById('settingVacationDays');
     const userInput = document.getElementById('settingUserName');
     const empInput = document.getElementById('settingEmployerName');
 
-    if (minHInput) minHInput.value = this.config.weeklyHoursMin;
-    if (maxHInput) maxHInput.value = this.config.weeklyHoursMax;
-    if (wageInput) wageInput.value = this.config.hourlyRate;
+    if (targetInput) targetInput.value = this.config.weeklyTargetHours;
     if (breakInput) breakInput.value = this.config.defaultBreak;
     if (vacInput) vacInput.value = this.config.vacationDaysTotal;
     if (userInput) userInput.value = this.config.userName;
     if (empInput) empInput.value = this.config.employerName;
+  }
+
+  async handleSettingsSubmit(e) {
+    e.preventDefault();
+    const targetH = Number(document.getElementById('settingWeeklyTarget').value) || 12.0;
+    const defBreak = Number(document.getElementById('settingDefaultBreak').value) || 0;
+    const vacTotal = Number(document.getElementById('settingVacationDays').value) || 20;
+    const userName = (document.getElementById('settingUserName').value || '').trim();
+    const employerName = (document.getElementById('settingEmployerName').value || '').trim();
+
+    await db.setSetting('weeklyTargetHours', targetH);
+    await db.setSetting('defaultBreak', defBreak);
+    await db.setSetting('vacationDaysTotal', vacTotal);
+    await db.setSetting('userName', userName);
+    await db.setSetting('employerName', employerName);
+
+    await this.loadSettings();
+    if (!this.editingRecordId) {
+      this.resetEntryFormToDefaults();
+    }
+    this.render();
+    this.showToast('✓ Einstellungen gespeichert');
   }
 
   renderPrintTimesheet(agg, lifetimeOvertime) {
@@ -817,12 +1141,11 @@ class ShiftlyApp {
       rowsHtml += `
         <tr>
           <td>${r.date}</td>
-          <td>${isVac ? 'Urlaub (Freigestellt)' : 'Arbeit'}</td>
+          <td>${isVac ? 'Urlaub' : 'Arbeit'}</td>
           <td>${isVac ? '—' : (r.start_time || '—')}</td>
           <td>${isVac ? '—' : (r.end_time || '—')}</td>
           <td>${isVac ? '—' : (r.break_minutes || 0) + ' Min.'}</td>
           <td style="text-align: right; font-weight: 600;">${TimeEngine.formatHoursPretty(r.net_hours)}</td>
-          <td style="text-align: right;">${currencyFormatter.format(r.earnings)}</td>
           <td>${escapeHtml(r.note || '')}</td>
         </tr>
       `;
@@ -832,23 +1155,20 @@ class ShiftlyApp {
       <div class="print-header">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
           <div>
-            <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem;">STUNDENZETTEL & TÄTIGKEITSNACHWEIS</h1>
-            <p style="font-size: 0.9rem; color: #444;">Nachweis gemäß Mindestlohngesetz (MiLoG)</p>
+            <h1 style="font-size: 1.4rem; margin-bottom: 0.25rem;">STUNDENZETTEL</h1>
           </div>
           <div style="text-align: right; font-size: 0.9rem;">
-            <strong>Abrechnungszeitraum:</strong><br>
-            ${agg.startDate} bis ${agg.endDate}
+            <strong>Zeitraum:</strong> ${agg.startDate} bis ${agg.endDate}
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 0.75rem 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.2rem; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 0.6rem 0;">
           <div>
-            <strong>Arbeitnehmer:</strong> ${escapeHtml(userDisplay)}<br>
-            <strong>Vereinbarte Wochenarbeitszeit:</strong> ${this.config.weeklyHoursMin} – ${this.config.weeklyHoursMax} Stunden/Woche
+            <strong>Name:</strong> ${escapeHtml(userDisplay)}<br>
+            <strong>Zielstunden:</strong> ${this.config.weeklyTargetHours} Std./Woche
           </div>
           <div>
-            <strong>Arbeitgeber:</strong> ${escapeHtml(employerDisplay)}<br>
-            <strong>Stundensatz:</strong> ${currencyFormatter.format(this.config.hourlyRate)} / Std.
+            <strong>Firma:</strong> ${escapeHtml(employerDisplay)}
           </div>
         </div>
       </div>
@@ -862,29 +1182,26 @@ class ShiftlyApp {
             <th>Ende</th>
             <th>Pause</th>
             <th style="text-align: right;">Stunden</th>
-            <th style="text-align: right;">Verdienst</th>
-            <th>Tätigkeit / Bemerkung</th>
+            <th>Notiz</th>
           </tr>
         </thead>
         <tbody>
-          ${rowsHtml || '<tr><td colspan="8" style="text-align:center;">Keine Einträge im Zeitraum.</td></tr>'}
+          ${rowsHtml || '<tr><td colspan="7" style="text-align:center;">Keine Einträge im Zeitraum.</td></tr>'}
         </tbody>
         <tfoot>
           <tr style="font-weight: 700; background: #eee;">
             <td colspan="5">GESAMTSUMME:</td>
             <td style="text-align: right;">${TimeEngine.formatHoursPretty(agg.totalHours)}</td>
-            <td style="text-align: right;">${currencyFormatter.format(agg.totalEarnings)}</td>
             <td>Saldo: ${agg.periodOvertimeDelta > 0 ? '+' : ''}${TimeEngine.formatHoursPretty(agg.periodOvertimeDelta)}</td>
           </tr>
         </tfoot>
       </table>
 
-      <div style="margin-top: 1.5rem; font-size: 0.85rem; color: #555;">
-        Gesamter Überstunden-Stand (Kumuliert): <strong>${lifetimeOvertime > 0 ? '+' : ''}${TimeEngine.formatHoursPretty(lifetimeOvertime)}</strong> | 
-        Urlaubstage im Zeitraum: <strong>${agg.vacationDaysInPeriod}</strong> (Resturlaub Jahr: ${agg.vacationDaysRemaining} Tage)
+      <div style="margin-top: 1.2rem; font-size: 0.85rem; color: #444;">
+        Überstunden-Saldo gesamt: <strong>${lifetimeOvertime > 0 ? '+' : ''}${TimeEngine.formatHoursPretty(lifetimeOvertime)}</strong>
       </div>
 
-      <div class="print-signatures" style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-top: 4rem;">
+      <div class="print-signatures" style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-top: 3.5rem;">
         <div style="border-top: 1px solid #000; padding-top: 0.5rem; font-size: 0.85rem;">
           Datum, Unterschrift Arbeitnehmer/in
         </div>
@@ -895,168 +1212,10 @@ class ShiftlyApp {
     `;
   }
 
-  openEntryModal(defaultType = 'work', recordId = null) {
-    this.editingRecordId = recordId;
-    const modal = document.getElementById('entryModal');
-    const title = document.getElementById('entryModalTitle');
-    const dateInput = document.getElementById('entryDate');
-    const startInput = document.getElementById('shiftStart');
-    const endInput = document.getElementById('shiftEnd');
-    const breakInput = document.getElementById('shiftBreak');
-    const vacHoursInput = document.getElementById('vacationPaidHours');
-    const wageInput = document.getElementById('entryHourlyWage');
-    const noteInput = document.getElementById('entryNote');
-
-    let currentType = defaultType || 'work';
-
-    if (recordId) {
-      const rec = this.records.find(r => r.id === recordId);
-      if (rec) {
-        currentType = rec.type || 'work';
-        if (title) title.textContent = 'Eintrag bearbeiten';
-        if (dateInput) dateInput.value = rec.date;
-        if (startInput) startInput.value = rec.start_time || '';
-        if (endInput) endInput.value = rec.end_time || '';
-        if (breakInput) breakInput.value = rec.break_minutes ?? 0;
-        if (vacHoursInput) vacHoursInput.value = rec.net_hours ?? 2.5;
-        if (wageInput) wageInput.value = rec.hourly_rate ?? this.config.hourlyRate;
-        if (noteInput) noteInput.value = rec.note || '';
-      }
-    } else {
-      if (title) title.textContent = currentType === 'vacation' ? '🌴 Urlaubstag eintragen' : '⏱️ Schicht eintragen';
-      if (dateInput) dateInput.value = toLocalIsoDate(new Date());
-      if (startInput) startInput.value = '08:00';
-      if (endInput) endInput.value = '12:00';
-      if (breakInput) breakInput.value = this.config.defaultBreak;
-      if (vacHoursInput) vacHoursInput.value = 2.5;
-      if (wageInput) wageInput.value = this.config.hourlyRate;
-      if (noteInput) noteInput.value = '';
-    }
-
-    const typeRadio = document.querySelector(`input[name="entryType"][value="${currentType}"]`);
-    if (typeRadio) typeRadio.checked = true;
-    this.updateModalTypeFields(currentType);
-    this.updateModalNetHours();
-
-    if (modal) modal.classList.add('open');
-  }
-
-  updateModalTypeFields(type) {
-    const workFields = document.getElementById('modalWorkShiftFields');
-    const vacFields = document.getElementById('modalVacationFields');
-    const title = document.getElementById('entryModalTitle');
-    if (type === 'vacation') {
-      if (workFields) workFields.style.display = 'none';
-      if (vacFields) vacFields.style.display = 'block';
-      if (title && !this.editingRecordId) title.textContent = '🌴 Urlaubstag eintragen';
-    } else {
-      if (workFields) workFields.style.display = 'block';
-      if (vacFields) vacFields.style.display = 'none';
-      if (title && !this.editingRecordId) title.textContent = '⏱️ Schicht eintragen';
-    }
-    this.updateModalNetHours();
-  }
-
-  updateModalNetHours() {
-    const type = document.querySelector('input[name="entryType"]:checked')?.value || 'work';
-    const preview = document.getElementById('entryModalNetPreview');
-    const earningsPreview = document.getElementById('entryModalEarningsPreview');
-    const wage = Number(document.getElementById('entryHourlyWage')?.value) || this.config.hourlyRate;
-
-    let hours = 0;
-    if (type === 'vacation') {
-      hours = Number(document.getElementById('vacationPaidHours')?.value) || 0;
-      if (preview) preview.textContent = `Urlaubs-Gutschrift: ${TimeEngine.formatHoursPretty(hours)}`;
-    } else {
-      const start = document.getElementById('shiftStart')?.value;
-      const end = document.getElementById('shiftEnd')?.value;
-      const breakMin = document.getElementById('shiftBreak')?.value;
-      hours = TimeEngine.calculateNetHours(start, end, breakMin);
-      if (preview) preview.textContent = `Netto-Arbeitszeit: ${TimeEngine.formatHoursPretty(hours)}`;
-    }
-
-    if (earningsPreview) {
-      const earn = TimeEngine.calculateEarnings(hours, wage);
-      earningsPreview.textContent = currencyFormatter.format(earn);
-    }
-  }
-
-  closeModals() {
-    document.querySelectorAll('.modal').forEach(m => m.classList.remove('open'));
-    this.editingRecordId = null;
-  }
-
-  async handleEntrySubmit(e) {
-    e.preventDefault();
-    const type = document.querySelector('input[name="entryType"]:checked')?.value || 'work';
-    const date = document.getElementById('entryDate').value;
-    const hourlyRate = Number(document.getElementById('entryHourlyWage').value) || this.config.hourlyRate;
-    const note = document.getElementById('entryNote').value.trim();
-
-    let netHours = 0;
-    let startTime = '';
-    let endTime = '';
-    let breakMinutes = 0;
-
-    if (type === 'vacation') {
-      netHours = Number(document.getElementById('vacationPaidHours').value) || 0;
-    } else {
-      startTime = document.getElementById('shiftStart').value;
-      endTime = document.getElementById('shiftEnd').value;
-      breakMinutes = Number(document.getElementById('shiftBreak').value) || 0;
-      netHours = TimeEngine.calculateNetHours(startTime, endTime, breakMinutes);
-    }
-
-    const earnings = TimeEngine.calculateEarnings(netHours, hourlyRate);
-
-    const recordData = {
-      id: this.editingRecordId || undefined,
-      type,
-      date,
-      year_month: date.substring(0, 7),
-      start_time: startTime,
-      end_time: endTime,
-      break_minutes: breakMinutes,
-      net_hours: netHours,
-      hourly_rate: hourlyRate,
-      earnings: earnings,
-      note
-    };
-
-    await db.saveRecord(recordData);
-    await this.loadRecords();
-    this.closeModals();
-    this.render();
-    this.showToast(type === 'vacation' ? '🌴 Urlaubstag gespeichert!' : '✓ Arbeitsschicht gespeichert!');
-  }
-
-  async handleSettingsSubmit(e) {
-    e.preventDefault();
-    const minH = Number(document.getElementById('settingWeeklyMin').value);
-    const maxH = Number(document.getElementById('settingWeeklyMax').value);
-    const wage = Number(document.getElementById('settingHourlyRate').value);
-    const defBreak = Number(document.getElementById('settingDefaultBreak').value);
-    const vacTotal = Number(document.getElementById('settingVacationDays').value);
-    const userName = document.getElementById('settingUserName').value.trim();
-    const employerName = document.getElementById('settingEmployerName').value.trim();
-
-    await db.setSetting('weeklyHoursMin', minH);
-    await db.setSetting('weeklyHoursMax', maxH);
-    await db.setSetting('hourlyRate', wage);
-    await db.setSetting('defaultBreak', defBreak);
-    await db.setSetting('vacationDaysTotal', vacTotal);
-    await db.setSetting('userName', userName);
-    await db.setSetting('employerName', employerName);
-
-    await this.loadSettings();
-    this.render();
-    this.showToast('✨ Einstellungen erfolgreich gespeichert!');
-  }
-
   async handleBackupShare() {
     const res = await ExportService.backupAndShare();
     if (res.success && res.method === 'download') {
-      this.showToast('☁️ Backup-Datei heruntergeladen');
+      this.showToast('☁️ Backup heruntergeladen');
     }
   }
 
@@ -1064,15 +1223,15 @@ class ShiftlyApp {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
-    if (confirm('Achtung: Dies überschreibt alle bestehenden Daten mit dem Backup. Fortfahren?')) {
+    if (confirm('Bestehende Daten mit diesem Backup überschreiben?')) {
       try {
         await ExportService.restoreFromJsonFile(file);
         await this.loadSettings();
         await this.loadRecords();
         this.render();
-        this.showToast('📥 Backup erfolgreich wiederhergestellt!');
+        this.showToast('📥 Backup geladen');
       } catch (err) {
-        alert('Fehler beim Wiederherstellen: ' + err.message);
+        alert('Fehler beim Laden: ' + err.message);
       }
     }
     e.target.value = '';
@@ -1081,7 +1240,7 @@ class ShiftlyApp {
   handleExportCsv() {
     const agg = TimeEngine.aggregateDateRange(this.records, this.startDate, this.endDate, this.config);
     ExportService.exportDateRangeCsv(agg);
-    this.showToast('📊 CSV-Stundenzettel exportiert');
+    this.showToast('📊 CSV exportiert');
   }
 }
 

@@ -1,8 +1,7 @@
 /**
  * Shiftly Time Engine (js/time_engine.js)
- * Pure domain logic: shift duration, breaks, hourly earnings, 10-15h corridor overtimes,
- * flexible date range filtering, vacation tracking and ISO calendar weeks.
- * Zero DOM or network dependencies.
+ * Pure domain logic: shift duration, breaks, weekly target hours,
+ * date range aggregation, vacation tracking and ISO calendar weeks.
  */
 
 export class TimeEngine {
@@ -22,7 +21,7 @@ export class TimeEngine {
     let endTotalMin = eh * 60 + em;
 
     if (endTotalMin < startTotalMin) {
-      endTotalMin += 24 * 60; // Overnight shift
+      endTotalMin += 24 * 60;
     }
 
     const grossMinutes = endTotalMin - startTotalMin;
@@ -32,22 +31,12 @@ export class TimeEngine {
   }
 
   /**
-   * Calculates earnings for a given number of hours and hourly wage.
-   */
-  static calculateEarnings(hours, hourlyRate) {
-    const h = Number(hours) || 0;
-    const r = Number(hourlyRate) || 0;
-    return Number((h * r).toFixed(2));
-  }
-
-  /**
    * Returns the ISO calendar week string 'YYYY-Www' for a given YYYY-MM-DD date.
    */
   static getIsoWeek(dateStr) {
     const d = new Date(dateStr + 'T00:00:00');
     if (isNaN(d.getTime())) return '';
 
-    // Thursday in current week decides the year.
     d.setDate(d.getDate() + 4 - (d.getDay() || 7));
     const yearStart = new Date(d.getFullYear(), 0, 1);
     const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
@@ -55,32 +44,21 @@ export class TimeEngine {
   }
 
   /**
-   * Calculates weekly over/under hours based on the 10-15h corridor.
-   * Corridor rule:
-   *  - < minHours (10h): Saldo = actual - 10 (negative)
-   *  - 10h to 15h: Saldo = 0 (perfect target corridor)
-   *  - > maxHours (15h): Saldo = actual - 15 (positive)
+   * Calculates weekly over/under hours against the configured weekly target (default 12h).
    */
-  static calculateCorridorDelta(actualHours, minHours = 10.0, maxHours = 15.0) {
+  static calculateTargetDelta(actualHours, targetHours = 12.0) {
     const h = Number(actualHours) || 0;
-    if (h < minHours) {
-      return Number((h - minHours).toFixed(2));
-    } else if (h > maxHours) {
-      return Number((h - maxHours).toFixed(2));
-    }
-    return 0.0;
+    const t = Number(targetHours) || 12.0;
+    return Number((h - t).toFixed(2));
   }
 
   /**
-   * Aggregates records for an arbitrary date range (startDate to endDate inclusive).
+   * Aggregates records for a date range (startDate to endDate inclusive).
    */
   static aggregateDateRange(records, startDate, endDate, config = {}) {
-    const minHours = Number(config.weeklyHoursMin) || 10.0;
-    const maxHours = Number(config.weeklyHoursMax) || 15.0;
-    const defaultWage = Number(config.hourlyRate) || 14.0;
+    const targetHours = Number(config.weeklyTargetHours) || 12.0;
     const totalVacationDays = Number(config.vacationDaysTotal) || 20;
 
-    // Filter by date range
     const filteredRecords = records.filter(r => {
       if (!r.date) return false;
       return r.date >= startDate && r.date <= endDate;
@@ -88,44 +66,34 @@ export class TimeEngine {
 
     let totalWorkHours = 0;
     let totalVacationHours = 0;
-    let totalEarnings = 0;
     let vacationDaysInPeriod = 0;
 
     const enrichedRecords = filteredRecords.map(r => {
       const type = r.type || 'work';
       let netHours = 0;
-      let earnings = 0;
-      const rate = r.hourly_rate !== undefined ? Number(r.hourly_rate) : defaultWage;
 
       if (type === 'vacation') {
         netHours = Number(r.net_hours) || 0;
-        earnings = r.earnings !== undefined ? Number(r.earnings) : this.calculateEarnings(netHours, rate);
         totalVacationHours += netHours;
         vacationDaysInPeriod += 1;
       } else {
         netHours = r.net_hours !== undefined
           ? Number(r.net_hours)
           : this.calculateNetHours(r.start_time, r.end_time, r.break_minutes);
-        earnings = r.earnings !== undefined ? Number(r.earnings) : this.calculateEarnings(netHours, rate);
         totalWorkHours += netHours;
       }
-
-      totalEarnings += earnings;
 
       return {
         ...r,
         type,
         net_hours: netHours,
-        hourly_rate: rate,
-        earnings: earnings,
         iso_week: this.getIsoWeek(r.date)
       };
     });
 
     const totalHours = Number((totalWorkHours + totalVacationHours).toFixed(2));
-    totalEarnings = Number(totalEarnings.toFixed(2));
 
-    // Group all records by ISO week to calculate corridor balances
+    // Group by ISO week
     const weeklyMap = {};
     for (const r of enrichedRecords) {
       const week = r.iso_week;
@@ -136,17 +104,17 @@ export class TimeEngine {
 
     let periodOvertimeDelta = 0;
     const weeklyDetails = Object.values(weeklyMap).map(w => {
-      const delta = this.calculateCorridorDelta(w.hours, minHours, maxHours);
+      const delta = this.calculateTargetDelta(w.hours, targetHours);
       periodOvertimeDelta += delta;
       return {
         week: w.week,
         hours: Number(w.hours.toFixed(2)),
-        delta: delta,
+        targetHours,
+        delta,
         recordCount: w.records.length
       };
     });
 
-    // Calculate vacation totals for current year from ALL records (not just this period)
     const currentYear = (startDate ? startDate.substring(0, 4) : new Date().getFullYear().toString());
     const yearVacationRecords = records.filter(r => (r.type === 'vacation') && r.date && r.date.startsWith(currentYear));
     const vacationDaysTakenYear = yearVacationRecords.length;
@@ -159,11 +127,11 @@ export class TimeEngine {
       totalHours,
       totalWorkHours: Number(totalWorkHours.toFixed(2)),
       totalVacationHours: Number(totalVacationHours.toFixed(2)),
-      totalEarnings,
       vacationDaysInPeriod,
       vacationDaysTakenYear,
       vacationDaysRemaining,
       totalVacationDays,
+      weeklyTargetHours: targetHours,
       periodOvertimeDelta: Number(periodOvertimeDelta.toFixed(2)),
       weeklyDetails,
       records: enrichedRecords
@@ -171,33 +139,32 @@ export class TimeEngine {
   }
 
   /**
-   * Calculates overall overtime balance across all past full weeks.
+   * Calculates cumulative overtime balance across all recorded calendar weeks.
    */
   static calculateLifetimeOvertime(allRecords, config = {}) {
-    const minHours = Number(config.weeklyHoursMin) || 10.0;
-    const maxHours = Number(config.weeklyHoursMax) || 15.0;
+    const targetHours = Number(config.weeklyTargetHours) || 12.0;
 
     const weeklyMap = {};
     for (const r of allRecords) {
       if (!r.date) continue;
       const week = this.getIsoWeek(r.date);
       if (!weeklyMap[week]) weeklyMap[week] = 0;
-      const hours = r.net_hours !== undefined 
-        ? Number(r.net_hours) 
+      const hours = r.net_hours !== undefined
+        ? Number(r.net_hours)
         : this.calculateNetHours(r.start_time, r.end_time, r.break_minutes);
       weeklyMap[week] += hours;
     }
 
     let cumulativeOvertime = 0;
     for (const week of Object.keys(weeklyMap)) {
-      cumulativeOvertime += this.calculateCorridorDelta(weeklyMap[week], minHours, maxHours);
+      cumulativeOvertime += this.calculateTargetDelta(weeklyMap[week], targetHours);
     }
 
     return Number(cumulativeOvertime.toFixed(2));
   }
 
   /**
-   * Formats decimal hours into German format: "X Std. Y Min." or "X,XX h".
+   * Formats decimal hours cleanly: e.g. "4 h" or "4 h 30 m"
    */
   static formatHoursPretty(hours) {
     const hNum = Number(hours) || 0;

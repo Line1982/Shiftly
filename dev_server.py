@@ -39,6 +39,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     os.chdir(str(DIRECTORY))
     lan_ip = get_local_ip()
 
@@ -50,8 +52,8 @@ def main():
     print("=" * 60)
     print(" Drücke Strg+C zum Beenden.")
 
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    with http.server.ThreadingHTTPServer(("", PORT), Handler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

@@ -3,526 +3,331 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Shiftly — Arbeitszeit, Urlaub & Überstunden</title>
-  
+  <title>Shiftly</title>
+
   <!-- PWA & Mobile Meta Tags -->
   <meta name="application-name" content="Shiftly">
   <meta name="apple-mobile-web-app-title" content="Shiftly">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="theme-color" content="#f8f9fc">
+  <meta name="theme-color" content="#f1f5f9">
   <meta name="format-detection" content="telephone=no">
 
   <!-- Manifest & Icons -->
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="icon" type="image/png" href="assets/icon-192.png">
-  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+  <link rel="manifest" href="manifest.json?v=4.4.0">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4.4.0">
+  <link rel="icon" type="image/png" href="assets/icon-192.png?v=4.4.0">
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico?v=4.4.0">
 
-  <link rel="stylesheet" href="styles.css?v=3.0.0">
+  <link rel="stylesheet" href="styles.css?v=4.4.0">
 </head>
 <body>
 
-  <!-- Ambient Top Background Glow -->
-  <div class="ambient-bg" aria-hidden="true"></div>
+  <div class="app-shell">
 
-  <!-- Sleek App Header -->
-  <header class="app-header">
-    <div class="header-inner">
-      <div class="header-top">
-        <div class="brand">
-          <div class="brand-logo" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </div>
-          <div>
-            <div class="brand-greeting" id="brandGreeting">Hallo! 👋</div>
-            <div class="brand-title">Shiftly</div>
-          </div>
-        </div>
+    <!-- SWIPEABLE TABS VIEWPORT -->
+    <main class="tabs-viewport" id="tabsViewport">
+      <div class="tabs-track" id="tabsTrack">
 
-        <div class="header-actions">
-          <button type="button" class="icon-pill-btn" id="btnHeaderPrint" title="Stundenzettel drucken / PDF">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 6 2 18 2 18 9"></polyline>
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-              <rect x="6" y="14" width="12" height="8"></rect>
-            </svg>
-            <span>PDF</span>
-          </button>
-          <span class="badge-offline" id="offlineBadge" title="Alle Daten sicher auf deinem Gerät gespeichert">
-            <span class="status-dot"></span> Lokal
-          </span>
-        </div>
-      </div>
+        <!-- ========================================================
+             TAB 1: EINTRAGEN (HAUPTFOKUS — SEITE VOLL AUSGENUTZT)
+             ======================================================== -->
+        <section class="tab-screen" id="tab-entry" aria-label="Stunden eintragen">
 
-      <!-- Modern Period Switcher Pill Bar -->
-      <div class="period-bar">
-        <div class="period-pills-scroll" id="periodPillsContainer">
-          <button type="button" class="period-pill active" data-preset="current_month">Dieser Monat</button>
-          <button type="button" class="period-pill" data-preset="last_month">Letzter Monat</button>
-          <button type="button" class="period-pill" data-preset="period_26_to_25">26. – 25.</button>
-          <button type="button" class="period-pill" data-preset="period_16_to_15">16. – 15.</button>
-          <button type="button" class="period-pill" data-preset="current_year">Ganzes Jahr</button>
-          <button type="button" class="period-pill" data-preset="custom" id="btnToggleCustomDates">📅 Zeitraum…</button>
-        </div>
-
-        <!-- Active Date Range Summary & Month Stepper -->
-        <div class="period-summary-row">
-          <button type="button" class="stepper-btn" id="btnPrevPeriod" aria-label="Vorheriger Monat" title="Einen Monat zurück">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
-          <button type="button" class="period-active-label" id="btnActivePeriodLabel" title="Zeitraum anpassen">
-            <span id="activePeriodText">Aktueller Zeitraum</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </button>
-          <button type="button" class="stepper-btn" id="btnNextPeriod" aria-label="Nächster Monat" title="Einen Monat vor">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        </div>
-
-        <!-- Hidden / Collapsible Custom Date Picker Drawer -->
-        <div class="custom-dates-drawer" id="customDatesDrawer" hidden>
-          <!-- Keep hidden select for backward compatibility if needed -->
-          <select id="periodPresetSelect" hidden>
-            <option value="current_month">Aktueller Monat</option>
-            <option value="last_month">Letzter Monat</option>
-            <option value="period_26_to_25">Abrechnung (26.–25.)</option>
-            <option value="period_16_to_15">Abrechnung (16.–15.)</option>
-            <option value="current_year">Gesamtes Jahr</option>
-          </select>
-          <div class="custom-dates-grid">
-            <div class="date-field-box">
-              <label class="date-filter-label" for="filterStartDate">Von Datum</label>
-              <input type="date" class="date-input-modern" id="filterStartDate">
+          <!-- Top Key Metrics Strip (3 Numbers) -->
+          <div class="status-strip">
+            <div class="status-box status-box-week">
+              <span class="status-label" id="statWeekLabel">Woche</span>
+              <div class="status-value" id="statWeekHours">0 / 12 h</div>
+              <div class="mini-progress">
+                <div class="mini-progress-fill" id="statWeekBar" style="width: 0%;"></div>
+              </div>
             </div>
-            <div class="date-field-box">
-              <label class="date-filter-label" for="filterEndDate">Bis Datum</label>
-              <input type="date" class="date-input-modern" id="filterEndDate">
+
+            <div class="status-box">
+              <span class="status-label">Monat</span>
+              <div class="status-value" id="statMonthHours">0 h</div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </header>
 
-  <!-- Main Content Container -->
-  <main class="main-content">
-
-    <!-- TAB 1: COCKPIT / DASHBOARD -->
-    <section id="tab-dashboard" class="tab-pane active">
-
-      <!-- Everyday Quick-Action Launcher (1-Tap Alltagshilfen) -->
-      <div class="quick-launcher-card">
-        <div class="quick-launcher-header">
-          <span class="quick-launcher-title">⚡ Schnell-Eintrag für heute</span>
-          <span class="quick-launcher-date" id="todayQuickLabel">Heute</span>
-        </div>
-        <div class="quick-actions-row">
-          <button type="button" class="quick-action-tile primary-tile" id="btnHeroAddShift">
-            <div class="tile-icon">⏱️</div>
-            <div class="tile-text">
-              <strong>Schicht eintragen</strong>
-              <span>Freie Zeiteingabe</span>
-            </div>
-          </button>
-          <button type="button" class="quick-action-tile vacation-tile" id="btnHeroAddVacation">
-            <div class="tile-icon">🌴</div>
-            <div class="tile-text">
-              <strong>Urlaubstag</strong>
-              <span>Mit Stunden-Gutschrift</span>
-            </div>
-          </button>
-        </div>
-        <div class="instant-presets-bar">
-          <span class="instant-label">1-Tap Vorlagen:</span>
-          <div class="instant-chips">
-            <button type="button" class="instant-chip" data-quick-start="08:00" data-quick-end="12:00">+ Heute 08–12 (4h)</button>
-            <button type="button" class="instant-chip" data-quick-start="08:00" data-quick-end="13:00">+ Heute 08–13 (5h)</button>
-            <button type="button" class="instant-chip" data-quick-start="09:00" data-quick-end="12:00">+ Heute 09–12 (3h)</button>
-            <button type="button" class="instant-chip" data-quick-start="14:00" data-quick-end="18:00">+ Heute 14–18 (4h)</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Current Week Live Corridor Spotlight -->
-      <div class="week-spotlight-card" id="currentWeekSpotlight">
-        <div class="spotlight-top">
-          <div>
-            <span class="spotlight-eyebrow" id="currentWeekTitle">AKTUELLE WOCHE</span>
-            <h2 class="spotlight-hours" id="currentWeekHours">0 h</h2>
-          </div>
-          <div class="spotlight-badge" id="currentWeekBadge">Soll: 10–15 h</div>
-        </div>
-        <div class="corridor-meter">
-          <div class="corridor-meter-track">
-            <div class="corridor-zone-marker" id="corridorZoneMarker" title="Optimaler Korridor (10–15h)"></div>
-            <div class="corridor-meter-fill" id="currentWeekMeterFill" style="width: 0%;"></div>
-          </div>
-          <div class="corridor-meter-labels">
-            <span>0 h</span>
-            <span id="corridorMinLabel">Min: 10 h</span>
-            <span id="corridorMaxLabel">Max: 15 h</span>
-          </div>
-        </div>
-        <div class="spotlight-sub" id="currentWeekHint">Noch keine Stunden in dieser Kalenderwoche erfasst.</div>
-      </div>
-
-      <!-- Bento KPI Grid -->
-      <div class="kpi-grid">
-        <!-- Total Hours in Period -->
-        <div class="kpi-card kpi-card-sky">
-          <div class="kpi-card-top">
-            <span class="kpi-icon-box sky">⏱️</span>
-            <span class="kpi-label">Stunden</span>
-          </div>
-          <div class="kpi-value" id="kpiTotalHours">0 h</div>
-          <div class="kpi-subtext" id="kpiTotalHoursSub">Arbeit: 0 h · Urlaub: 0 h</div>
-        </div>
-
-        <!-- Total Earnings in Period -->
-        <div class="kpi-card kpi-card-emerald">
-          <div class="kpi-card-top">
-            <span class="kpi-icon-box emerald">💶</span>
-            <span class="kpi-label">Verdienst</span>
-          </div>
-          <div class="kpi-value" id="kpiTotalEarnings">0,00 €</div>
-          <div class="kpi-subtext" id="kpiEarningsSub">Im gewählten Zeitraum</div>
-        </div>
-
-        <!-- Overtime Corridor Balance -->
-        <div class="kpi-card kpi-card-amber">
-          <div class="kpi-card-top">
-            <span class="kpi-icon-box amber">⚖️</span>
-            <span class="kpi-label">Überstunden</span>
-          </div>
-          <div class="kpi-value" id="kpiOvertimeBalance">±0 h</div>
-          <div class="kpi-subtext" id="kpiOvertimeSub">Zeitraum: ±0 h</div>
-        </div>
-
-        <!-- Vacation Account -->
-        <div class="kpi-card kpi-card-purple">
-          <div class="kpi-card-top">
-            <span class="kpi-icon-box purple">🌴</span>
-            <span class="kpi-label">Resturlaub</span>
-          </div>
-          <div class="kpi-value" id="kpiVacationRemaining">20 Tage</div>
-          <div class="kpi-subtext" id="kpiVacationSub">0 von 20 Tagen genutzt</div>
-        </div>
-      </div>
-
-      <!-- Recent Entries Preview (First for immediate daily feedback) -->
-      <div class="section-header-row">
-        <h3 class="section-title">Letzte Einträge</h3>
-        <button type="button" class="link-btn" id="btnSeeAllShifts">Alle ansehen →</button>
-      </div>
-      <div class="shifts-list" id="dashboardRecentShifts">
-        <div class="empty-state">Lade Einträge...</div>
-      </div>
-
-      <!-- Weekly Breakdown (Corridor Check) -->
-      <div class="section-header-row" style="margin-top: 1.5rem;">
-        <h3 class="section-title">Wochen-Übersicht im Zeitraum</h3>
-        <span class="section-pill" id="weeklyCorridorInfoPill">10–15 h / Woche</span>
-      </div>
-      <div class="weekly-breakdown-card" id="dashboardWeeklyBreakdown">
-        <div class="empty-state">Lade Wochenübersicht...</div>
-      </div>
-    </section>
-
-    <!-- TAB 2: ALL ENTRIES LIST -->
-    <section id="tab-shifts" class="tab-pane">
-      <div class="shifts-toolbar">
-        <div class="filter-chips" id="shiftListFilterChips">
-          <button type="button" class="filter-chip active" data-filter="all">Alle</button>
-          <button type="button" class="filter-chip" data-filter="work">⏱️ Arbeit</button>
-          <button type="button" class="filter-chip" data-filter="vacation">🌴 Urlaub</button>
-        </div>
-        <div class="search-box">
-          <input type="search" class="search-input" id="shiftSearchInput" placeholder="Suche nach Datum, Notiz...">
-        </div>
-      </div>
-
-      <div class="section-header-row">
-        <h3 class="section-title" id="shiftsCountHeader">Einträge im Zeitraum</h3>
-        <button type="button" class="link-btn" id="btnExportCsvQuick">📊 CSV Export</button>
-      </div>
-
-      <div class="shifts-list" id="allShiftsList">
-        <div class="empty-state">Keine Einträge vorhanden.</div>
-      </div>
-    </section>
-
-    <!-- TAB 3: SETTINGS & EXPORT -->
-    <section id="tab-settings" class="tab-pane">
-      <div class="section-header-row">
-        <h3 class="section-title">Stundenzettel & Datensicherung</h3>
-      </div>
-      <div class="export-action-grid">
-        <button type="button" class="export-card-btn primary-export" id="btnPrintTimesheet">
-          <span class="export-icon">🖨️</span>
-          <div class="export-text">
-            <strong>DIN A4 Stundenzettel (PDF / Druck)</strong>
-            <span>Offizieller Nachweis mit Unterschriftsfeld</span>
-          </div>
-        </button>
-
-        <button type="button" class="export-card-btn" id="btnExportCsv">
-          <span class="export-icon">📊</span>
-          <div class="export-text">
-            <strong>Excel / CSV Export</strong>
-            <span>Tabelle für den gewählten Zeitraum</span>
-          </div>
-        </button>
-
-        <button type="button" class="export-card-btn" id="btnBackupShare">
-          <span class="export-icon">☁️</span>
-          <div class="export-text">
-            <strong>Backup sichern & teilen</strong>
-            <span>In Google Drive, iCloud oder Dateien speichern</span>
-          </div>
-        </button>
-
-        <button type="button" class="export-card-btn" id="btnRestore">
-          <span class="export-icon">📥</span>
-          <div class="export-text">
-            <strong>Backup wiederherstellen</strong>
-            <span>Gesicherte .json Datei einspielen</span>
-          </div>
-        </button>
-        <input type="file" id="fileRestoreInput" accept=".json" style="display: none;">
-      </div>
-
-      <div class="section-header-row" style="margin-top: 1.5rem;">
-        <h3 class="section-title">Vertrag & Vorgaben</h3>
-      </div>
-      <div class="card settings-card">
-        <form id="settingsForm">
-          <div class="settings-group-title">Wochenkorridor & Vergütung</div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="settingWeeklyMin">Min. Soll (Std./Woche)</label>
-              <input type="number" step="0.5" class="form-control" id="settingWeeklyMin" value="10.0" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="settingWeeklyMax">Max. Soll (Std./Woche)</label>
-              <input type="number" step="0.5" class="form-control" id="settingWeeklyMax" value="15.0" required>
+            <div class="status-box">
+              <span class="status-label">Überstunden</span>
+              <div class="status-value" id="statOvertime">0 h</div>
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="settingHourlyRate">Stundenlohn (€)</label>
-              <input type="number" step="0.01" class="form-control" id="settingHourlyRate" value="14.00" required>
+          <!-- Central Direct Entry Card (Fills the screen harmoniously) -->
+          <form class="entry-card" id="entryForm">
+
+            <!-- Edit Mode Banner (Only visible when editing an existing entry) -->
+            <div class="edit-banner" id="editModeBanner" hidden>
+              <span>✏️ Eintrag bearbeiten</span>
+              <button type="button" class="btn-cancel-edit" id="btnCancelEdit">Abbrechen</button>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="settingVacationDays">Jahresurlaub (Tage)</label>
-              <input type="number" class="form-control" id="settingVacationDays" value="20" required>
+
+            <!-- Row 1: Date Picker + Subtle Type Switch -->
+            <div class="entry-top-row">
+              <div class="date-stepper" id="workDateStepper">
+                <button type="button" class="date-step-btn" id="btnDatePrev" aria-label="Ein Tag zurück">‹</button>
+                <input type="date" class="date-input-main" id="entryDate" lang="de-DE" required>
+                <button type="button" class="date-step-btn" id="btnDateNext" aria-label="Ein Tag vor">›</button>
+                <button type="button" class="date-today-btn" id="btnDateToday">Heute</button>
+              </div>
+
+              <!-- Vacation Calendar Month Stepper (Visible in Vacation Planner mode) -->
+              <div class="date-stepper" id="vacMonthStepper" hidden>
+                <button type="button" class="date-step-btn" id="btnVacCalPrev" aria-label="Vorheriger Monat">‹</button>
+                <span class="vac-cal-month-label" id="vacCalMonthLabel">Monat</span>
+                <button type="button" class="date-step-btn" id="btnVacCalNext" aria-label="Nächster Monat">›</button>
+                <button type="button" class="date-today-btn" id="btnVacCalClear" title="Auswahl leeren">Reset</button>
+              </div>
+
+              <div class="type-switch" role="radiogroup" aria-label="Eintragsart">
+                <button type="button" class="type-pill active" data-type="work">Arbeit</button>
+                <button type="button" class="type-pill" data-type="vacation" title="Urlaubsplaner">🌴 Urlaub</button>
+              </div>
+            </div>
+
+            <!-- Row 2A: Work Shift Stacked Big 24h Time Cards + Clean Break Bar -->
+            <div class="work-fields" id="modalWorkShiftFields">
+              <div class="time-card-box">
+                <span class="time-card-label">Beginn (24h)</span>
+                <div class="time-24h-picker" role="group" aria-label="Schichtbeginn 24h">
+                  <select class="time-24h-select" id="shiftStartHour" aria-label="Beginn Stunde"></select>
+                  <span class="time-24h-colon">:</span>
+                  <select class="time-24h-select" id="shiftStartMin" aria-label="Beginn Minute"></select>
+                  <span class="time-24h-suffix">Uhr</span>
+                </div>
+                <input type="hidden" id="shiftStart" value="08:00">
+              </div>
+
+              <div class="time-card-box">
+                <span class="time-card-label">Ende (24h)</span>
+                <div class="time-24h-picker" role="group" aria-label="Schichtende 24h">
+                  <select class="time-24h-select" id="shiftEndHour" aria-label="Ende Stunde"></select>
+                  <span class="time-24h-colon">:</span>
+                  <select class="time-24h-select" id="shiftEndMin" aria-label="Ende Minute"></select>
+                  <span class="time-24h-suffix">Uhr</span>
+                </div>
+                <input type="hidden" id="shiftEnd" value="12:00">
+              </div>
+
+              <!-- Clean Unpaid Break Selector -->
+              <div class="break-bar">
+                <span class="break-label">Pause</span>
+                <div class="break-pills">
+                  <button type="button" class="break-pill active" data-break="0">Keine</button>
+                  <button type="button" class="break-pill" data-break="15">15m</button>
+                  <button type="button" class="break-pill" data-break="30">30m</button>
+                  <button type="button" class="break-pill" data-break="45">45m</button>
+                </div>
+                <input type="hidden" id="shiftBreak" value="0">
+              </div>
+            </div>
+
+            <!-- Row 2B: Interactive Vacation Range Calendar + Per-Day Hours Customizer -->
+            <div class="vacation-fields" id="modalVacationFields" hidden>
+              <!-- Single-Day Edit Mode (Only visible when editing a single existing vacation record) -->
+              <div id="vacSingleEditBox" class="vac-single-edit" hidden>
+                <label class="time-card-box" for="vacationPaidHours">
+                  <span class="time-card-label">Urlaubsstunden</span>
+                  <input type="number" step="0.25" min="0" max="24" class="time-card-input" id="vacationPaidHours" value="2.4">
+                </label>
+              </div>
+
+              <!-- Interactive Month Calendar & Individual Day Hours List -->
+              <div id="vacPlannerBox" class="vac-planner-box">
+                <div class="vac-cal-toolbar">
+                  <div class="vac-default-hours-pill">
+                    <span>Std./Tag:</span>
+                    <button type="button" class="vac-std-step" id="btnVacStdMinus">−</button>
+                    <input type="number" step="0.25" min="0" max="24" id="vacDefaultHoursInput" class="vac-std-input" value="2.4">
+                    <button type="button" class="vac-std-step" id="btnVacStdPlus">+</button>
+                  </div>
+                  <div class="vac-Quick-actions">
+                    <button type="button" class="vac-range-btn" id="btnVacSelectRange" title="Zeitraum von erstem bis letztem gewählten Tag füllen">↔ Zeitraum (Mo–Fr)</button>
+                    <span class="vac-remaining-badge" id="vacationRemainingHint">20 T. frei</span>
+                  </div>
+                </div>
+
+                <!-- Compact 7-Column Calendar Grid -->
+                <div class="vac-calendar-card">
+                  <div class="vac-cal-weekdays">
+                    <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span class="wknd">Sa</span><span class="wknd">So</span>
+                  </div>
+                  <div class="vac-cal-grid" id="vacCalendarGrid"></div>
+                </div>
+
+                <!-- Selected Vacation Days List with Individual Hour Controls -->
+                <div class="vac-selected-days-list" id="vacSelectedDaysList"></div>
+              </div>
+            </div>
+
+            <!-- Row 3: Optional Note -->
+            <div class="note-row">
+              <input type="text" class="note-input" id="entryNote" placeholder="Notiz (optional)…">
+            </div>
+
+            <!-- Row 4: Giant Submit Button with Live Net Hours -->
+            <button type="submit" class="btn-save-giant" id="btnSubmitEntry">
+              + 4 h eintragen
+            </button>
+
+          </form>
+
+        </section>
+
+        <!-- ========================================================
+             TAB 2: VERLAUF (EINTRÄGE & WOCHEN)
+             ======================================================== -->
+        <section class="tab-screen" id="tab-shifts" aria-label="Verlauf">
+
+          <!-- Month Stepper & Sub-View Toggle -->
+          <div class="history-top-bar">
+            <div class="month-stepper">
+              <button type="button" class="month-step-btn" id="btnPrevPeriod" aria-label="Vorheriger Monat">‹</button>
+              <button type="button" class="month-label-btn" id="btnActivePeriodLabel">
+                <span id="activePeriodText">Monat</span>
+              </button>
+              <button type="button" class="month-step-btn" id="btnNextPeriod" aria-label="Nächster Monat">›</button>
+            </div>
+
+            <div class="view-switch">
+              <button type="button" class="view-pill active" data-subview="list">Einträge</button>
+              <button type="button" class="view-pill" data-subview="weeks">Wochen</button>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="settingDefaultBreak">Standard-Pause (Minuten)</label>
-            <input type="number" class="form-control" id="settingDefaultBreak" value="0">
+          <!-- Collapsible Custom Date Range Drawer -->
+          <div class="custom-dates-drawer" id="customDatesDrawer" hidden>
+            <div class="preset-row">
+              <button type="button" class="period-pill active" data-preset="current_month">Monat</button>
+              <button type="button" class="period-pill" data-preset="period_26_to_25">26.–25.</button>
+              <button type="button" class="period-pill" data-preset="period_16_to_15">16.–15.</button>
+              <button type="button" class="period-pill" data-preset="current_year">Jahr</button>
+            </div>
+            <div class="custom-dates-grid">
+              <input type="date" class="date-input-compact" id="filterStartDate" aria-label="Von Datum">
+              <span>–</span>
+              <input type="date" class="date-input-compact" id="filterEndDate" aria-label="Bis Datum">
+            </div>
           </div>
 
-          <div class="settings-group-title" style="margin-top: 0.75rem;">Angaben für den Stundenzettel</div>
-          <div class="form-group">
-            <label class="form-label" for="settingUserName">Dein Name</label>
-            <input type="text" class="form-control" id="settingUserName" placeholder="Vor- und Nachname">
+          <!-- Compact Period Summary Bar -->
+          <div class="history-summary-bar">
+            <span>Gesamt: <strong id="histTotalHours">0 h</strong></span>
+            <span>Ziel: <strong id="histTargetInfo">12 h/Wo.</strong></span>
+            <span>Urlaub: <strong id="histVacationInfo">20 T. frei</strong></span>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="settingEmployerName">Arbeitgeber / Firma</label>
-            <input type="text" class="form-control" id="settingEmployerName" placeholder="Name des Unternehmens">
+          <!-- Scrollable List Container -->
+          <div class="history-scroll-area">
+            <div id="allShiftsList" class="records-list"></div>
+            <div id="dashboardWeeklyBreakdown" class="weeks-list" hidden></div>
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block btn-lg">
-            ✨ Einstellungen speichern
-          </button>
-        </form>
+        </section>
+
+        <!-- ========================================================
+             TAB 3: SETUP & EXPORT (KOMPAKT AUF 1 SEITE)
+             ======================================================== -->
+        <section class="tab-screen" id="tab-settings" aria-label="Einstellungen">
+
+          <form class="settings-card" id="settingsForm">
+            <div class="target-setting-hero">
+              <label class="target-setting-label" for="settingWeeklyTarget">Zielstunden / Woche</label>
+              <div class="target-setting-control">
+                <button type="button" class="target-step-btn" id="btnTargetMinus">−</button>
+                <input type="number" step="0.5" min="1" max="60" class="target-setting-input" id="settingWeeklyTarget" value="12" required>
+                <span class="target-setting-unit">h</span>
+                <button type="button" class="target-step-btn" id="btnTargetPlus">+</button>
+              </div>
+            </div>
+
+            <div class="settings-grid-2">
+              <div class="setting-box">
+                <label class="setting-label" for="settingDefaultBreak">Standard-Pause (Min)</label>
+                <input type="number" step="5" min="0" class="setting-input" id="settingDefaultBreak" value="0">
+              </div>
+              <div class="setting-box">
+                <label class="setting-label" for="settingVacationDays">Urlaubstage / Jahr</label>
+                <input type="number" min="0" class="setting-input" id="settingVacationDays" value="20" required>
+              </div>
+            </div>
+
+            <div class="settings-grid-2">
+              <div class="setting-box">
+                <label class="setting-label" for="settingUserName">Name (für PDF)</label>
+                <input type="text" class="setting-input" id="settingUserName" placeholder="Optional">
+              </div>
+              <div class="setting-box">
+                <label class="setting-label" for="settingEmployerName">Firma (für PDF)</label>
+                <input type="text" class="setting-input" id="settingEmployerName" placeholder="Optional">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-save-settings">✓ Einstellungen speichern</button>
+          </form>
+
+          <!-- Compact 2x2 Export & Backup Grid -->
+          <div class="export-grid">
+            <button type="button" class="export-btn" id="btnPrintTimesheet">
+              <span class="export-btn-icon">🖨️</span>
+              <span>PDF / Druck</span>
+            </button>
+
+            <button type="button" class="export-btn" id="btnExportCsv">
+              <span class="export-btn-icon">📊</span>
+              <span>CSV Export</span>
+            </button>
+
+            <button type="button" class="export-btn" id="btnBackupShare">
+              <span class="export-btn-icon">☁️</span>
+              <span>Backup</span>
+            </button>
+
+            <button type="button" class="export-btn" id="btnRestore">
+              <span class="export-btn-icon">📥</span>
+              <span>Einlesen</span>
+            </button>
+            <input type="file" id="fileRestoreInput" accept=".json" hidden>
+          </div>
+
+        </section>
+
       </div>
-    </section>
+    </main>
 
-  </main>
-
-  <!-- Modern Floating Island Bottom Navigation with Central Action Dock -->
-  <div class="bottom-dock-wrapper">
-    <nav class="bottom-nav" aria-label="Hauptnavigation">
-      <button type="button" class="bottom-nav-btn active" data-tab="dashboard">
-        <svg class="nav-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="9" rx="2"></rect>
-          <rect x="14" y="3" width="7" height="5" rx="2"></rect>
-          <rect x="14" y="12" width="7" height="9" rx="2"></rect>
-          <rect x="3" y="16" width="7" height="5" rx="2"></rect>
+    <!-- BOTTOM TAB NAVIGATION -->
+    <nav class="bottom-nav" aria-label="Navigation">
+      <button type="button" class="nav-tab active" data-tab="entry" data-index="0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
-        <span>Cockpit</span>
+        <span>Eintragen</span>
       </button>
 
-      <button type="button" class="bottom-nav-btn" data-tab="shifts">
-        <svg class="nav-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="16" y1="2" x2="16" y2="6"></line>
-          <line x1="8" y1="2" x2="8" y2="6"></line>
-          <line x1="3" y1="10" x2="21" y2="10"></line>
+      <button type="button" class="nav-tab" data-tab="shifts" data-index="1">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"></line>
+          <line x1="8" y1="12" x2="21" y2="12"></line>
+          <line x1="8" y1="18" x2="21" y2="18"></line>
+          <line x1="3" y1="6" x2="3.01" y2="6"></line>
+          <line x1="3" y1="12" x2="3.01" y2="12"></line>
+          <line x1="3" y1="18" x2="3.01" y2="18"></line>
         </svg>
         <span>Verlauf</span>
       </button>
 
-      <!-- Center Prominent Action Button -->
-      <div class="dock-fab-group">
-        <button type="button" class="fab-main" id="fabAddShift" title="Neuen Eintrag erfassen" aria-label="Neuen Eintrag erfassen">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
-      </div>
-
-      <button type="button" class="bottom-nav-btn" id="btnQuickAddVacation" title="Urlaubstag eintragen">
-        <svg class="nav-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="4"></circle>
-          <path d="M12 2v2"></path>
-          <path d="M12 20v2"></path>
-          <path d="m4.93 4.93 1.41 1.41"></path>
-          <path d="m17.66 17.66 1.41 1.41"></path>
-          <path d="M2 12h2"></path>
-          <path d="M20 12h2"></path>
-          <path d="m6.34 17.66-1.41 1.41"></path>
-          <path d="m19.07 4.93-1.41 1.41"></path>
-        </svg>
-        <span>+ Urlaub</span>
-      </button>
-
-      <button type="button" class="bottom-nav-btn" data-tab="settings">
-        <svg class="nav-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <button type="button" class="nav-tab" data-tab="settings" data-index="2">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
         <span>Setup</span>
       </button>
     </nav>
-  </div>
 
-  <!-- Combined Entry Modal (Bottom Sheet for Work Shift or Vacation) -->
-  <div class="modal" id="entryModal" role="dialog" aria-modal="true" aria-labelledby="entryModalTitle">
-    <div class="modal-backdrop"></div>
-    <div class="modal-sheet">
-      <div class="sheet-handle" aria-hidden="true"></div>
-      <div class="modal-header">
-        <h3 class="modal-title" id="entryModalTitle">Eintrag erfassen</h3>
-        <button type="button" class="modal-close" aria-label="Schließen">&times;</button>
-      </div>
-
-      <form id="entryForm">
-        <!-- Segment Toggle: Work vs Vacation -->
-        <div class="segment-toggle">
-          <label>
-            <input type="radio" name="entryType" value="work" checked>
-            <span class="segment-label-content">⏱️ Arbeitsschicht</span>
-          </label>
-          <label>
-            <input type="radio" name="entryType" value="vacation">
-            <span class="segment-label-content">🌴 Urlaubstag</span>
-          </label>
-        </div>
-
-        <!-- Quick Date Selection + Date Input -->
-        <div class="form-group">
-          <div class="label-with-chips">
-            <label class="form-label" for="entryDate">Datum</label>
-            <div class="inline-chips">
-              <button type="button" class="micro-chip" data-date-offset="0">Heute</button>
-              <button type="button" class="micro-chip" data-date-offset="-1">Gestern</button>
-              <button type="button" class="micro-chip" data-date-offset="-2">Vorgestern</button>
-            </div>
-          </div>
-          <input type="date" class="form-control" id="entryDate" required>
-        </div>
-
-        <!-- Work Shift Fields -->
-        <div id="modalWorkShiftFields">
-          <div class="form-group">
-            <span class="form-label">Schnell-Zeiten wählen</span>
-            <div class="preset-chips-row">
-              <button type="button" class="preset-chip" data-start="08:00" data-end="12:00">08:00 – 12:00 (4h)</button>
-              <button type="button" class="preset-chip" data-start="08:00" data-end="13:00">08:00 – 13:00 (5h)</button>
-              <button type="button" class="preset-chip" data-start="09:00" data-end="13:00">09:00 – 13:00 (4h)</button>
-              <button type="button" class="preset-chip" data-start="08:00" data-end="14:00">08:00 – 14:00 (6h)</button>
-              <button type="button" class="preset-chip" data-start="13:00" data-end="17:00">13:00 – 17:00 (4h)</button>
-              <button type="button" class="preset-chip" data-start="14:00" data-end="18:00">14:00 – 18:00 (4h)</button>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="shiftStart">Beginn</label>
-              <input type="time" class="form-control time-input-lg" id="shiftStart">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="shiftEnd">Ende</label>
-              <input type="time" class="form-control time-input-lg" id="shiftEnd">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <div class="label-with-chips">
-              <label class="form-label" for="shiftBreak">Pause (Minuten)</label>
-              <div class="inline-chips">
-                <button type="button" class="micro-chip" data-break="0">Keine</button>
-                <button type="button" class="micro-chip" data-break="15">15m</button>
-                <button type="button" class="micro-chip" data-break="30">30m</button>
-                <button type="button" class="micro-chip" data-break="45">45m</button>
-              </div>
-            </div>
-            <input type="number" class="form-control" id="shiftBreak" min="0" step="5" value="0">
-          </div>
-        </div>
-
-        <!-- Vacation Specific Fields -->
-        <div id="modalVacationFields" style="display: none;">
-          <div class="form-group">
-            <div class="label-with-chips">
-              <label class="form-label" for="vacationPaidHours">Angerechnete Stunden</label>
-              <div class="inline-chips">
-                <button type="button" class="micro-chip" data-vac-hours="2">2,0 h</button>
-                <button type="button" class="micro-chip" data-vac-hours="2.5">2,5 h</button>
-                <button type="button" class="micro-chip" data-vac-hours="3">3,0 h</button>
-                <button type="button" class="micro-chip" data-vac-hours="4">4,0 h</button>
-              </div>
-            </div>
-            <input type="number" step="0.25" class="form-control" id="vacationPaidHours" value="2.5" placeholder="z. B. 2,5 Stunden">
-            <small class="field-hint">Zählt automatisch für dein Wochen-Soll und deinen Verdienst mit.</small>
-          </div>
-        </div>
-
-        <!-- Live Calculation Summary Banner inside Modal -->
-        <div class="modal-live-summary">
-          <div class="live-summary-left">
-            <span class="live-summary-label">Zusammenfassung</span>
-            <div id="entryModalNetPreview" class="live-summary-hours">Netto-Arbeitszeit: 0 h</div>
-          </div>
-          <div class="live-summary-right" id="entryModalEarningsPreview">0,00 €</div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="entryNote">Notiz (optional)</label>
-            <input type="text" class="form-control" id="entryNote" placeholder="z. B. Vertretung, Event...">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="entryHourlyWage">Stundensatz (€)</label>
-            <input type="number" step="0.01" class="form-control" id="entryHourlyWage" required>
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-block btn-lg">
-          ✓ Eintrag speichern
-        </button>
-      </form>
-    </div>
   </div>
 
   <!-- Toast Feedback Container -->
@@ -532,6 +337,6 @@
   <section id="printTimesheetSection"></section>
 
   <!-- App Entry Script -->
-  <script type="module" src="js/app.js?v=3.0.0"></script>
+  <script type="module" src="js/app.js?v=4.4.0"></script>
 </body>
 </html>

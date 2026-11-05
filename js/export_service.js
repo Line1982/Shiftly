@@ -7,8 +7,7 @@ import { db } from './db.js';
 
 export class ExportService {
   /**
-   * Triggers native Web Share API (ideal for Mobile saving directly to Google Drive/Files)
-   * with fallback to browser file download.
+   * Triggers native Web Share API with fallback to browser file download.
    */
   static async backupAndShare() {
     const backupData = await db.exportAllData();
@@ -23,7 +22,7 @@ export class ExportService {
       try {
         await navigator.share({
           title: 'Shiftly Backup',
-          text: `Shiftly Arbeitszeit-Datensicherung vom ${dateStr}`,
+          text: `Shiftly Datensicherung vom ${dateStr}`,
           files: [file]
         });
         return { success: true, method: 'share' };
@@ -60,14 +59,14 @@ export class ExportService {
   }
 
   /**
-   * Generates and downloads a CSV timesheet file for the given aggregated date range.
+   * Generates and downloads a CSV timesheet file for the given aggregated date range (without earnings).
    */
   static exportDateRangeCsv(aggregation) {
-    const { startDate, endDate, records, totalHours, totalEarnings, periodOvertimeDelta } = aggregation;
+    const { startDate, endDate, records, totalHours, periodOvertimeDelta } = aggregation;
     const lines = [];
 
     // Header
-    lines.push(['Datum', 'Typ', 'Beginn', 'Ende', 'Pause (Min)', 'Stunden', 'Stundensatz (€)', 'Verdienst (€)', 'Notiz'].map(this.escapeCsv).join(';'));
+    lines.push(['Datum', 'Typ', 'Beginn', 'Ende', 'Pause (Min)', 'Stunden', 'Notiz'].map(this.escapeCsv).join(';'));
 
     // Rows
     for (const r of records) {
@@ -79,14 +78,12 @@ export class ExportService {
         r.end_time || '',
         r.break_minutes ?? 0,
         String(r.net_hours).replace('.', ','),
-        String(r.hourly_rate).replace('.', ','),
-        String(r.earnings).replace('.', ','),
         r.note || ''
       ].map(this.escapeCsv).join(';'));
     }
 
     // Summary row
-    lines.push(['SUMME', '', '', '', '', String(totalHours).replace('.', ','), '', String(totalEarnings).replace('.', ','), `Saldo: ${String(periodOvertimeDelta).replace('.', ',')} h`].map(this.escapeCsv).join(';'));
+    lines.push(['SUMME', '', '', '', '', String(totalHours).replace('.', ','), `Saldo: ${String(periodOvertimeDelta).replace('.', ',')} h`].map(this.escapeCsv).join(';'));
 
     const csvContent = '\uFEFF' + lines.join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
