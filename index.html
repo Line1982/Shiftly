@@ -14,12 +14,12 @@
   <meta name="format-detection" content="telephone=no">
 
   <!-- Manifest & Icons -->
-  <link rel="manifest" href="manifest.json?v=4.5.5">
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4.5.5">
-  <link rel="icon" type="image/png" href="assets/icon-192.png?v=4.5.5">
-  <link rel="icon" type="image/x-icon" href="assets/favicon.ico?v=4.5.5">
+  <link rel="manifest" href="manifest.json?v=4.6.0">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4.6.0">
+  <link rel="icon" type="image/png" href="assets/icon-192.png?v=4.6.0">
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico?v=4.6.0">
 
-  <link rel="stylesheet" href="styles.css?v=4.5.5">
+  <link rel="stylesheet" href="styles.css?v=4.6.0">
 </head>
 <body>
 
@@ -36,18 +36,18 @@
 
           <!-- Top Key Metrics Strip (3 Numbers) -->
           <div class="status-strip">
-            <div class="status-box status-box-week">
+            <button type="button" class="status-box status-box-btn status-box-week" id="statBoxWeek" title="Zur Wochen-Ansicht">
               <span class="status-label" id="statWeekLabel">Woche</span>
               <div class="status-value" id="statWeekHours">0 / 12 h</div>
               <div class="mini-progress">
                 <div class="mini-progress-fill" id="statWeekBar" style="width: 0%;"></div>
               </div>
-            </div>
+            </button>
 
-            <div class="status-box">
+            <button type="button" class="status-box status-box-btn" id="statBoxMonth" title="Zu den Einträgen">
               <span class="status-label">Monat</span>
               <div class="status-value" id="statMonthHours">0 h</div>
-            </div>
+            </button>
 
             <div class="status-box">
               <span class="status-label">Überstunden</span>
@@ -274,11 +274,19 @@
             <div class="settings-grid-2">
               <div class="setting-box">
                 <label class="setting-label" for="settingDefaultBreak">Standard-Pause (Min)</label>
-                <input type="number" step="5" min="0" class="setting-input" id="settingDefaultBreak" value="0">
+                <div class="setting-stepper">
+                  <button type="button" class="setting-step-btn" id="btnBreakMinus" aria-label="Pause verringern">−</button>
+                  <input type="number" step="5" min="0" class="setting-input" id="settingDefaultBreak" value="0">
+                  <button type="button" class="setting-step-btn" id="btnBreakPlus" aria-label="Pause erhöhen">+</button>
+                </div>
               </div>
               <div class="setting-box">
                 <label class="setting-label" for="settingVacationDays">Urlaubstage / Jahr</label>
-                <input type="number" min="0" class="setting-input" id="settingVacationDays" value="20" required>
+                <div class="setting-stepper">
+                  <button type="button" class="setting-step-btn" id="btnVacDaysMinus" aria-label="Urlaubstage verringern">−</button>
+                  <input type="number" min="0" class="setting-input" id="settingVacationDays" value="20" required>
+                  <button type="button" class="setting-step-btn" id="btnVacDaysPlus" aria-label="Urlaubstage erhöhen">+</button>
+                </div>
               </div>
             </div>
 
@@ -365,6 +373,6 @@
   <section id="printTimesheetSection"></section>
 
   <!-- App Entry Script -->
-  <script type="module" src="js/app.js?v=4.5.5"></script>
+  <script type="module" src="js/app.js?v=4.6.0"></script>
 </body>
 </html>

@@ -55,10 +55,13 @@ class ShiftlyApp {
       defaultBreak: 0,
       vacationDaysTotal: 20,
       userName: '',
-      employerName: ''
+      employerName: '',
+      lastShiftStart: '08:00',
+      lastShiftEnd: '12:00'
     };
 
     this.records = [];
+    this.saveFeedbackTimer = null;
   }
 
   async init() {
@@ -138,13 +141,17 @@ class ShiftlyApp {
     const vacTotal = await db.getSetting('vacationDaysTotal', 20);
     const user = await db.getSetting('userName', '');
     const employer = await db.getSetting('employerName', '');
+    const lastStart = await db.getSetting('lastShiftStart', '08:00');
+    const lastEnd = await db.getSetting('lastShiftEnd', '12:00');
 
     this.config = {
       weeklyTargetHours: Number(targetH) || 12.0,
       defaultBreak: Number(defBreak) || 0,
       vacationDaysTotal: Number(vacTotal) || 20,
       userName: String(user || ''),
-      employerName: String(employer || '')
+      employerName: String(employer || ''),
+      lastShiftStart: String(lastStart || '08:00'),
+      lastShiftEnd: String(lastEnd || '12:00')
     };
   }
 
@@ -162,40 +169,141 @@ class ShiftlyApp {
     }
   }
 
-  showToast(message) {
+  triggerHaptic(pattern = 8) {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate(pattern);
+      } catch (_) {
+        // Ignore on unsupported browsers
+      }
+    }
+  }
+
+  burstConfetti() {
+    const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+    for (let i = 0; i < 20; i++) {
+      const bit = document.createElement('div');
+      bit.className = 'confetti-particle';
+      bit.style.left = `${12 + Math.random() * 76}%`;
+      bit.style.top = `${10 + Math.random() * 14}%`;
+      bit.style.background = colors[i % colors.length];
+      bit.style.animationDelay = `${Math.random() * 0.18}s`;
+      document.body.appendChild(bit);
+      setTimeout(() => bit.remove(), 1450);
+    }
+  }
+
+  getCurrentWeekHours() {
+    const todayIso = toLocalIsoDate(new Date());
+    const currentWeekKey = TimeEngine.getIsoWeek(todayIso);
+    let weekHours = 0;
+    for (const r of this.records) {
+      if (r.date && TimeEngine.getIsoWeek(r.date) === currentWeekKey) {
+        weekHours += Number(r.net_hours) || 0;
+      }
+    }
+    return Math.round(weekHours * 100) / 100;
+  }
+
+  showToast(message, options = {}) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
+
+    const { actionLabel = '', onAction = null, duration = 2000 } = options;
     const toast = document.createElement('div');
     toast.className = 'toast-msg';
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => {
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = message;
+    toast.appendChild(textSpan);
+
+    let dismissed = false;
+    const removeToast = () => {
+      if (dismissed) return;
+      dismissed = true;
       toast.style.opacity = '0';
       toast.style.transition = 'opacity 0.2s ease';
       setTimeout(() => toast.remove(), 220);
-    }, 2000);
+    };
+
+    if (actionLabel && typeof onAction === 'function') {
+      const actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'toast-undo-btn';
+      actionBtn.textContent = actionLabel;
+      actionBtn.addEventListener('click', async () => {
+        removeToast();
+        await onAction();
+      });
+      toast.appendChild(actionBtn);
+    }
+
+    container.appendChild(toast);
+    setTimeout(removeToast, duration);
+  }
+
+  bindStepper(minusId, plusId, inputId, step, min, max, fallbackVal) {
+    const btnMinus = document.getElementById(minusId);
+    const btnPlus = document.getElementById(plusId);
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    const adjust = (delta) => {
+      const cur = Number(input.value);
+      const base = isNaN(cur) ? fallbackVal : cur;
+      const next = Math.max(min, Math.min(max, Number((base + delta).toFixed(2))));
+      input.value = next;
+      this.triggerHaptic(6);
+    };
+
+    if (btnMinus) btnMinus.addEventListener('click', () => adjust(-step));
+    if (btnPlus) btnPlus.addEventListener('click', () => adjust(step));
   }
 
   bindEvents() {
     // Bottom Navigation Tabs
     document.querySelectorAll('.nav-tab[data-index]').forEach(btn => {
       btn.addEventListener('click', () => {
+        this.triggerHaptic(6);
         const idx = Number(btn.getAttribute('data-index'));
         this.switchTabByIndex(idx);
       });
     });
 
-    // Entry Date Stepper (Prev Day, Next Day, Today) & Native Date Overlay
+    // Clickable Status Strip Shortcuts (Week -> Weeks view, Month -> Entries view)
+    const statBoxWeek = document.getElementById('statBoxWeek');
+    const statBoxMonth = document.getElementById('statBoxMonth');
+    if (statBoxWeek) {
+      statBoxWeek.addEventListener('click', () => {
+        this.triggerHaptic(8);
+        this.setHistorySubView('weeks');
+        this.switchTabByIndex(1);
+      });
+    }
+    if (statBoxMonth) {
+      statBoxMonth.addEventListener('click', () => {
+        this.triggerHaptic(8);
+        this.setHistorySubView('list');
+        this.switchTabByIndex(1);
+      });
+    }
+
+    // Entry Date Stepper (Prev Day, Next Day, Smart Heute/Gestern) & Native Date Overlay
     const btnDatePrev = document.getElementById('btnDatePrev');
     const btnDateNext = document.getElementById('btnDateNext');
     const btnDateToday = document.getElementById('btnDateToday');
     const entryDateInput = document.getElementById('entryDate');
-    if (btnDatePrev) btnDatePrev.addEventListener('click', () => this.stepEntryDate(-1));
-    if (btnDateNext) btnDateNext.addEventListener('click', () => this.stepEntryDate(1));
+    if (btnDatePrev) btnDatePrev.addEventListener('click', () => { this.triggerHaptic(6); this.stepEntryDate(-1); });
+    if (btnDateNext) btnDateNext.addEventListener('click', () => { this.triggerHaptic(6); this.stepEntryDate(1); });
     if (btnDateToday) {
       btnDateToday.addEventListener('click', () => {
-        if (entryDateInput) {
-          entryDateInput.value = toLocalIsoDate(new Date());
+        if (!entryDateInput) return;
+        this.triggerHaptic(8);
+        const todayIso = toLocalIsoDate(new Date());
+        if (entryDateInput.value === todayIso) {
+          this.stepEntryDate(-1);
+        } else {
+          entryDateInput.value = todayIso;
           this.updateEntryDateDisplay();
         }
       });
@@ -307,6 +415,7 @@ class ShiftlyApp {
     // Entry Type Switch (Arbeit vs. Urlaub)
     document.querySelectorAll('.type-pill[data-type]').forEach(btn => {
       btn.addEventListener('click', () => {
+        this.triggerHaptic(8);
         const t = btn.getAttribute('data-type') || 'work';
         this.setEntryType(t);
       });
@@ -315,6 +424,7 @@ class ShiftlyApp {
     // Break Pills (Keine, 15m, 30m, 45m)
     document.querySelectorAll('.break-pill[data-break]').forEach(pill => {
       pill.addEventListener('click', () => {
+        this.triggerHaptic(6);
         const val = Number(pill.getAttribute('data-break')) || 0;
         const breakInput = document.getElementById('shiftBreak');
         if (breakInput) breakInput.value = val;
@@ -405,33 +515,15 @@ class ShiftlyApp {
     // Sub-view Switch in History Tab (Einträge vs. Wochen)
     document.querySelectorAll('.view-pill[data-subview]').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.historySubView = btn.getAttribute('data-subview') || 'list';
-        document.querySelectorAll('.view-pill[data-subview]').forEach(b => {
-          b.classList.toggle('active', b.getAttribute('data-subview') === this.historySubView);
-        });
-        const listEl = document.getElementById('allShiftsList');
-        const weeksEl = document.getElementById('dashboardWeeklyBreakdown');
-        if (listEl) listEl.hidden = this.historySubView !== 'list';
-        if (weeksEl) weeksEl.hidden = this.historySubView !== 'weeks';
+        this.triggerHaptic(6);
+        this.setHistorySubView(btn.getAttribute('data-subview') || 'list');
       });
     });
 
-    // Tab 3 (Settings): Target Hours +/- Steppers & Form Submit
-    const btnTargetMinus = document.getElementById('btnTargetMinus');
-    const btnTargetPlus = document.getElementById('btnTargetPlus');
-    const targetInput = document.getElementById('settingWeeklyTarget');
-    if (btnTargetMinus && targetInput) {
-      btnTargetMinus.addEventListener('click', () => {
-        const cur = Number(targetInput.value) || 12;
-        targetInput.value = Math.max(1, cur - 0.5);
-      });
-    }
-    if (btnTargetPlus && targetInput) {
-      btnTargetPlus.addEventListener('click', () => {
-        const cur = Number(targetInput.value) || 12;
-        targetInput.value = Math.min(60, cur + 0.5);
-      });
-    }
+    // Tab 3 (Settings): Tactile +/- Steppers & Form Submit
+    this.bindStepper('btnTargetMinus', 'btnTargetPlus', 'settingWeeklyTarget', 0.5, 1, 60, 12);
+    this.bindStepper('btnBreakMinus', 'btnBreakPlus', 'settingDefaultBreak', 5, 0, 120, 0);
+    this.bindStepper('btnVacDaysMinus', 'btnVacDaysPlus', 'settingVacationDays', 1, 0, 60, 20);
 
     const settingsForm = document.getElementById('settingsForm');
     if (settingsForm) {
@@ -456,13 +548,27 @@ class ShiftlyApp {
     }
   }
 
+  setHistorySubView(view) {
+    this.historySubView = view === 'weeks' ? 'weeks' : 'list';
+    document.querySelectorAll('.view-pill[data-subview]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-subview') === this.historySubView);
+    });
+    const listEl = document.getElementById('allShiftsList');
+    const weeksEl = document.getElementById('dashboardWeeklyBreakdown');
+    if (listEl) listEl.hidden = this.historySubView !== 'list';
+    if (weeksEl) weeksEl.hidden = this.historySubView !== 'weeks';
+  }
+
   initSwipeNavigation() {
     const viewport = document.getElementById('tabsViewport');
-    if (!viewport) return;
+    const track = document.getElementById('tabsTrack');
+    if (!viewport || !track) return;
 
     let startX = 0;
     let startY = 0;
+    let dx = 0;
     let isTracking = false;
+    let lockedHoriz = false;
 
     viewport.addEventListener('touchstart', (e) => {
       if (e.touches.length !== 1) return;
@@ -473,24 +579,59 @@ class ShiftlyApp {
       }
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
+      dx = 0;
       isTracking = true;
+      lockedHoriz = false;
     }, { passive: true });
 
-    viewport.addEventListener('touchend', (e) => {
-      if (!isTracking || e.changedTouches.length !== 1) return;
-      isTracking = false;
+    viewport.addEventListener('touchmove', (e) => {
+      if (!isTracking || e.touches.length !== 1) return;
+      const curDx = e.touches[0].clientX - startX;
+      const curDy = e.touches[0].clientY - startY;
 
-      const dx = e.changedTouches[0].clientX - startX;
-      const dy = e.changedTouches[0].clientY - startY;
-
-      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-        if (dx < 0 && this.activeTabIndex < 2) {
-          this.switchTabByIndex(this.activeTabIndex + 1);
-        } else if (dx > 0 && this.activeTabIndex > 0) {
-          this.switchTabByIndex(this.activeTabIndex - 1);
+      if (!lockedHoriz) {
+        if (Math.abs(curDx) > 10 && Math.abs(curDx) > Math.abs(curDy) * 1.15) {
+          lockedHoriz = true;
+          track.classList.add('is-dragging');
+        } else if (Math.abs(curDy) > 12) {
+          isTracking = false;
+          return;
         }
       }
-    }, { passive: true });
+
+      if (lockedHoriz) {
+        e.preventDefault();
+        dx = curDx;
+        // Rubber-band resistance past outer tab boundaries
+        if ((this.activeTabIndex === 0 && dx > 0) || (this.activeTabIndex === 2 && dx < 0)) {
+          dx *= 0.28;
+        }
+        const basePx = -(this.activeTabIndex * viewport.clientWidth);
+        track.style.transform = `translateX(${basePx + dx}px)`;
+      }
+    }, { passive: false });
+
+    const finishSwipe = () => {
+      if (!isTracking) return;
+      isTracking = false;
+      track.classList.remove('is-dragging');
+
+      if (!lockedHoriz) return;
+      lockedHoriz = false;
+
+      if (dx < -55 && this.activeTabIndex < 2) {
+        this.triggerHaptic(6);
+        this.switchTabByIndex(this.activeTabIndex + 1);
+      } else if (dx > 55 && this.activeTabIndex > 0) {
+        this.triggerHaptic(6);
+        this.switchTabByIndex(this.activeTabIndex - 1);
+      } else {
+        this.switchTabByIndex(this.activeTabIndex);
+      }
+    };
+
+    viewport.addEventListener('touchend', finishSwipe, { passive: true });
+    viewport.addEventListener('touchcancel', finishSwipe, { passive: true });
   }
 
   switchTabByIndex(index) {
@@ -499,6 +640,7 @@ class ShiftlyApp {
 
     const track = document.getElementById('tabsTrack');
     if (track) {
+      track.classList.remove('is-dragging');
       track.style.transform = `translateX(-${clamped * 33.333333}%)`;
     }
 
@@ -510,14 +652,20 @@ class ShiftlyApp {
   updateEntryDateDisplay() {
     const dateInput = document.getElementById('entryDate');
     const displayEl = document.getElementById('entryDateDisplay');
+    const todayBtn = document.getElementById('btnDateToday');
     if (!dateInput || !displayEl) return;
 
-    const val = dateInput.value || toLocalIsoDate(new Date());
+    const todayIso = toLocalIsoDate(new Date());
+    const val = dateInput.value || todayIso;
     const dObj = new Date(val + 'T00:00:00');
     if (isNaN(dObj)) {
       displayEl.textContent = val;
     } else {
       displayEl.textContent = dateFormatter.format(dObj);
+    }
+
+    if (todayBtn) {
+      todayBtn.textContent = val === todayIso ? 'Gestern' : 'Heute';
     }
   }
 
@@ -602,6 +750,7 @@ class ShiftlyApp {
   }
 
   toggleVacationDay(isoDate) {
+    this.triggerHaptic(6);
     if (!this.vacSelectedDays.has(isoDate)) {
       const existingVac = this.records.find(r => r.type === 'vacation' && r.date === isoDate);
       const hrs = existingVac ? (Number(existingVac.net_hours) || this.getDefaultDailyVacationHours()) : this.getDefaultDailyVacationHours();
@@ -800,6 +949,13 @@ class ShiftlyApp {
     const banner = document.getElementById('editModeBanner');
     if (banner) banner.hidden = true;
 
+    const btn = document.getElementById('btnSubmitEntry');
+    if (this.saveFeedbackTimer) {
+      clearTimeout(this.saveFeedbackTimer);
+      this.saveFeedbackTimer = null;
+    }
+    if (btn) btn.classList.remove('is-saved');
+
     const now = new Date();
     this.vacCalYear = now.getFullYear();
     this.vacCalMonth = now.getMonth();
@@ -816,8 +972,8 @@ class ShiftlyApp {
 
     if (dateInput) dateInput.value = toLocalIsoDate(now);
     this.updateEntryDateDisplay();
-    this.set24hSelectFromTimeStr('shiftStart', '08:00');
-    this.set24hSelectFromTimeStr('shiftEnd', '12:00');
+    this.set24hSelectFromTimeStr('shiftStart', this.config.lastShiftStart || '08:00');
+    this.set24hSelectFromTimeStr('shiftEnd', this.config.lastShiftEnd || '12:00');
     if (breakInput) breakInput.value = this.config.defaultBreak;
     if (vacHoursInput) vacHoursInput.value = defaultVacHours;
     if (vacDefInput) vacDefInput.value = defaultVacHours;
@@ -856,11 +1012,57 @@ class ShiftlyApp {
     this.switchTabByIndex(0);
   }
 
+  repeatRecordForToday(recordId) {
+    const rec = this.records.find(r => r.id === recordId);
+    if (!rec || rec.type === 'vacation') return;
+
+    this.triggerHaptic(8);
+    this.editingRecordId = null;
+
+    const banner = document.getElementById('editModeBanner');
+    if (banner) banner.hidden = true;
+
+    const dateInput = document.getElementById('entryDate');
+    const breakInput = document.getElementById('shiftBreak');
+    const noteInput = document.getElementById('entryNote');
+
+    if (dateInput) dateInput.value = toLocalIsoDate(new Date());
+    this.updateEntryDateDisplay();
+    this.set24hSelectFromTimeStr('shiftStart', rec.start_time || '08:00');
+    this.set24hSelectFromTimeStr('shiftEnd', rec.end_time || '12:00');
+    if (breakInput) breakInput.value = rec.break_minutes ?? 0;
+    if (noteInput) noteInput.value = rec.note || '';
+
+    this.syncBreakPillsUI(rec.break_minutes ?? 0);
+    this.setEntryType('work');
+    this.updateEntryLiveButton();
+    this.switchTabByIndex(0);
+    this.showToast(`⚡ Zeiten (${rec.start_time || '08:00'}–${rec.end_time || '12:00'}) für heute geladen`);
+  }
+
+  flashSubmitSaved(savedLabel) {
+    const btn = document.getElementById('btnSubmitEntry');
+    if (!btn) return;
+    if (this.saveFeedbackTimer) {
+      clearTimeout(this.saveFeedbackTimer);
+    }
+    btn.disabled = false;
+    btn.classList.add('is-saved');
+    btn.textContent = savedLabel;
+    this.saveFeedbackTimer = setTimeout(() => {
+      btn.classList.remove('is-saved');
+      this.saveFeedbackTimer = null;
+      this.updateEntryLiveButton();
+    }, 950);
+  }
+
   updateEntryLiveButton() {
     const btn = document.getElementById('btnSubmitEntry');
     if (!btn) return;
+    if (btn.classList.contains('is-saved')) return;
 
     if (this.entryType === 'vacation' && !this.editingRecordId) {
+      btn.disabled = false;
       const dayCount = this.vacSelectedDays.size;
       let totalHours = 0;
       for (const h of this.vacSelectedDays.values()) {
@@ -886,6 +1088,13 @@ class ShiftlyApp {
       hours = TimeEngine.calculateNetHours(start, end, breakMin);
     }
 
+    if (this.entryType === 'work' && hours <= 0) {
+      btn.disabled = true;
+      btn.textContent = 'Dauer > 0 h wählen';
+      return;
+    }
+
+    btn.disabled = false;
     const formatted = TimeEngine.formatHoursPretty(hours);
     if (this.editingRecordId) {
       btn.textContent = `✓ ${formatted} speichern`;
@@ -902,6 +1111,9 @@ class ShiftlyApp {
     try {
       const noteInput = document.getElementById('entryNote');
       const note = this.entryType === 'vacation' ? '' : (noteInput?.value || '').trim();
+
+      const prevWeekHours = this.getCurrentWeekHours();
+      const targetH = this.config.weeklyTargetHours || 12;
 
       // Multi-Day Vacation Planner Batch Save
       if (this.entryType === 'vacation' && !this.editingRecordId) {
@@ -937,13 +1149,22 @@ class ShiftlyApp {
 
         const count = sortedDates.length;
         await this.loadRecords();
+        const nextWeekHours = this.getCurrentWeekHours();
         this.vacSelectedDays.clear();
         this.vacActiveDay = null;
         if (noteInput) noteInput.value = '';
         this.render();
         this.renderVacationPlanner();
-        this.updateEntryLiveButton();
-        this.showToast(`🌴 ${count} Urlaubstag${count === 1 ? '' : 'e'} (${TimeEngine.formatHoursPretty(totalSavedHours)}) gespeichert`);
+        this.flashSubmitSaved(`✓ ${count} Urlaubstag${count === 1 ? '' : 'e'} gespeichert!`);
+
+        if (prevWeekHours < targetH && nextWeekHours >= targetH) {
+          this.burstConfetti();
+          this.triggerHaptic([12, 35, 18]);
+          this.showToast(`🎉 Wochenziel (${targetH} h) erreicht!`);
+        } else {
+          this.triggerHaptic(14);
+          this.showToast(`🌴 ${count} Urlaubstag${count === 1 ? '' : 'e'} (${TimeEngine.formatHoursPretty(totalSavedHours)}) gespeichert`);
+        }
         return;
       }
 
@@ -961,6 +1182,10 @@ class ShiftlyApp {
         endTime = document.getElementById('shiftEnd')?.value || '12:00';
         breakMinutes = Number(document.getElementById('shiftBreak')?.value) || 0;
         netHours = TimeEngine.calculateNetHours(startTime, endTime, breakMinutes);
+        if (netHours <= 0) {
+          this.showToast('⚠️ Bitte Dauer > 0 h wählen');
+          return;
+        }
       }
 
       const isEdit = Boolean(this.editingRecordId);
@@ -980,10 +1205,33 @@ class ShiftlyApp {
       }
 
       await db.saveRecord(recordData);
+
+      // Remember last work shift times so the next entry starts with them
+      if (this.entryType === 'work' && !isEdit) {
+        this.config.lastShiftStart = startTime;
+        this.config.lastShiftEnd = endTime;
+        await db.setSetting('lastShiftStart', startTime);
+        await db.setSetting('lastShiftEnd', endTime);
+      }
+
+      if (noteInput && document.activeElement === noteInput) {
+        noteInput.blur();
+      }
+
       await this.loadRecords();
+      const nextWeekHours = this.getCurrentWeekHours();
       this.resetEntryFormToDefaults();
       this.render();
-      this.showToast(isEdit ? '✓ Änderungen gespeichert' : `✓ ${TimeEngine.formatHoursPretty(netHours)} eingetragen`);
+      this.flashSubmitSaved(isEdit ? '✓ Gespeichert!' : `✓ ${TimeEngine.formatHoursPretty(netHours)} gespeichert!`);
+
+      if (!isEdit && prevWeekHours < targetH && nextWeekHours >= targetH) {
+        this.burstConfetti();
+        this.triggerHaptic([12, 35, 18]);
+        this.showToast(`🎉 Wochenziel (${targetH} h) erreicht!`);
+      } else {
+        this.triggerHaptic(14);
+        this.showToast(isEdit ? '✓ Änderungen gespeichert' : `✓ ${TimeEngine.formatHoursPretty(netHours)} eingetragen`);
+      }
     } catch (err) {
       console.error('Save failed:', err);
       this.showToast('⚠️ Fehler beim Speichern: ' + (err.message || 'Unbekannter Fehler'));
@@ -1067,13 +1315,7 @@ class ShiftlyApp {
     const currentWeekKey = TimeEngine.getIsoWeek(todayIso);
     const kwNumber = currentWeekKey.split('-W')[1] || '';
 
-    let weekHours = 0;
-    for (const r of this.records) {
-      if (r.date && TimeEngine.getIsoWeek(r.date) === currentWeekKey) {
-        weekHours += Number(r.net_hours) || 0;
-      }
-    }
-    weekHours = Math.round(weekHours * 100) / 100;
+    const weekHours = this.getCurrentWeekHours();
     const targetH = this.config.weeklyTargetHours || 12;
 
     const weekLabel = document.getElementById('statWeekLabel');
@@ -1083,7 +1325,7 @@ class ShiftlyApp {
     const overtimeEl = document.getElementById('statOvertime');
     const vacHintEl = document.getElementById('vacationRemainingHint');
 
-    if (weekLabel) weekLabel.textContent = `Woche (KW ${kwNumber})`;
+    if (weekLabel) weekLabel.textContent = weekHours >= targetH ? `Woche (KW ${kwNumber}) ✓` : `Woche (KW ${kwNumber})`;
     if (weekHoursEl) weekHoursEl.textContent = `${TimeEngine.formatHoursPretty(weekHours)} / ${targetH} h`;
 
     if (weekBarEl) {
@@ -1163,12 +1405,17 @@ class ShiftlyApp {
               </div>
               <div class="shift-item-right">
                 <span class="shift-hours-badge">${TimeEngine.formatHoursPretty(r.net_hours)}</span>
+                ${isVac ? '' : `<button type="button" class="icon-action-btn btn-repeat-record" data-id="${r.id}" title="Für heute übernehmen" aria-label="Nochmal für heute">↻</button>`}
                 <button type="button" class="icon-action-btn btn-edit-record" data-id="${r.id}" aria-label="Bearbeiten">✏️</button>
                 <button type="button" class="icon-action-btn btn-delete-record" data-id="${r.id}" aria-label="Löschen">🗑️</button>
               </div>
             </div>
           `;
         }).join('');
+
+        listContainer.querySelectorAll('.btn-repeat-record').forEach(btn => {
+          btn.addEventListener('click', () => this.repeatRecordForToday(btn.getAttribute('data-id')));
+        });
 
         listContainer.querySelectorAll('.btn-edit-record').forEach(btn => {
           btn.addEventListener('click', () => this.loadRecordIntoEntryForm(btn.getAttribute('data-id')));
@@ -1177,12 +1424,26 @@ class ShiftlyApp {
         listContainer.querySelectorAll('.btn-delete-record').forEach(btn => {
           btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-id');
-            if (confirm('Eintrag wirklich löschen?')) {
-              await db.deleteRecord(id);
-              await this.loadRecords();
-              this.render();
-              this.showToast('🗑️ Gelöscht');
-            }
+            const rec = this.records.find(r => r.id === id);
+            if (!rec) return;
+            const deletedRecord = { ...rec };
+
+            this.triggerHaptic(10);
+            await db.deleteRecord(id);
+            await this.loadRecords();
+            this.render();
+
+            this.showToast('🗑️ Gelöscht', {
+              actionLabel: 'Rückgängig',
+              duration: 4800,
+              onAction: async () => {
+                await db.saveRecord(deletedRecord);
+                await this.loadRecords();
+                this.render();
+                this.triggerHaptic(8);
+                this.showToast('✓ Wiederhergestellt');
+              }
+            });
           });
         });
       }
