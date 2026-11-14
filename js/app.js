@@ -171,7 +171,7 @@ class ShiftlyApp {
       });
 
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').then(reg => {
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
           reg.update().catch(() => {});
         }).catch(() => {});
       });
@@ -189,6 +189,19 @@ class ShiftlyApp {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map(r => r.unregister()));
       }
+      // Refresh browser HTTP disk cache entries before reloading
+      const coreUrls = [
+        './',
+        './index.html',
+        './styles.css',
+        './manifest.json',
+        './sw.js',
+        './js/app.js',
+        './js/db.js',
+        './js/time_engine.js',
+        './js/export_service.js'
+      ];
+      await Promise.all(coreUrls.map(u => fetch(u, { cache: 'reload' }).catch(() => {})));
     } catch (err) {
       console.warn('Force update cleanup warning:', err);
     }

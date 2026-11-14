@@ -4,7 +4,7 @@
  * and falls back seamlessly to IndexedDB + Cache when offline.
  */
 
-const CACHE_NAME = 'shiftly-cache-v4.6.3';
+const CACHE_NAME = 'shiftly-cache-v4.6.4';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -23,8 +23,15 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.all(
+        ASSETS_TO_CACHE.map(async (url) => {
+          const resp = await fetch(new Request(url, { cache: 'reload' }));
+          if (resp && resp.ok) {
+            await cache.put(url, resp);
+          }
+        })
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -40,8 +47,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  if (event.request.cache === 'only-if-cached' && event.request.mode !== 'same-origin') return;
+
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+
+  const fetchRequest = isSameOrigin
+    ? new Request(event.request.url, { cache: 'no-cache', credentials: 'same-origin' })
+    : event.request;
+
   event.respondWith(
-    fetch(event.request)
+    fetch(fetchRequest)
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const clone = networkResponse.clone();
