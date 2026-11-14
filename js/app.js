@@ -509,6 +509,10 @@ class ShiftlyApp {
     if (btnActivePeriodLabel) {
       btnActivePeriodLabel.addEventListener('click', () => this.toggleCustomDateDrawer());
     }
+    const btnToggleDateRange = document.getElementById('btnToggleDateRange');
+    if (btnToggleDateRange) {
+      btnToggleDateRange.addEventListener('click', () => this.toggleCustomDateDrawer());
+    }
 
     // Period Preset Pills in Drawer
     document.querySelectorAll('.period-pill[data-preset]').forEach(pill => {

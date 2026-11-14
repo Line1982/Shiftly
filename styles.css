@@ -1128,6 +1128,41 @@ html, body {
   font-weight: 900;
 }
 
+.history-actions-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.history-action-btn {
+  height: 42px;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f7fc 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-tile);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.history-action-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.history-action-primary {
+  background: linear-gradient(180deg, #5e56f8 0%, #4338ca 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 10px rgba(67, 56, 202, 0.28), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
 /* Scrollable Area Inside Tab 2 Only (Hidden Scrollbar) */
 .history-scroll-area {
   flex: 1;
@@ -1507,6 +1542,10 @@ html, body {
 
 .export-btn:active {
   transform: translateY(1px) scale(0.97);
+}
+
+.export-btn-wide {
+  grid-column: 1 / -1;
 }
 
 .export-btn-icon {
