@@ -161,12 +161,38 @@ class ShiftlyApp {
 
   registerServiceWorker() {
     if ('serviceWorker' in navigator) {
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController && !reloading) {
+          reloading = true;
+          window.location.reload();
+        }
+      });
+
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then(reg => {
           reg.update().catch(() => {});
         }).catch(() => {});
       });
     }
+  }
+
+  async forceAppUpdate() {
+    this.showToast('↻ Suche nach Update...');
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+    } catch (err) {
+      console.warn('Force update cleanup warning:', err);
+    }
+    window.location.reload();
   }
 
   triggerHaptic(pattern = 8) {
@@ -546,6 +572,9 @@ class ShiftlyApp {
       btnRestore.addEventListener('click', () => fileRestore.click());
       fileRestore.addEventListener('change', (e) => this.handleRestoreFile(e));
     }
+
+    const btnForceUpdate = document.getElementById('btnForceUpdate');
+    if (btnForceUpdate) btnForceUpdate.addEventListener('click', () => this.forceAppUpdate());
   }
 
   setHistorySubView(view) {
@@ -1620,15 +1649,21 @@ class ShiftlyApp {
   }
 
   async handlePrintTimesheet() {
-    const agg = TimeEngine.aggregateDateRange(this.records, this.startDate, this.endDate, this.config);
-    const lifetimeOvertime = TimeEngine.calculateLifetimeOvertime(this.records, this.config);
-    const res = await ExportService.printTimesheet({
-      agg,
-      lifetimeOvertime,
-      config: this.config
-    });
-    if (res && res.method === 'download') {
-      this.showToast('📄 PDF heruntergeladen');
+    try {
+      const agg = TimeEngine.aggregateDateRange(this.records, this.startDate, this.endDate, this.config);
+      const lifetimeOvertime = TimeEngine.calculateLifetimeOvertime(this.records, this.config);
+      const res = await ExportService.printTimesheet({
+        agg,
+        lifetimeOvertime,
+        config: this.config
+      });
+      if (res && res.method === 'download') {
+        this.showToast('📄 PDF heruntergeladen');
+      } else if (res && res.method === 'open') {
+        this.showToast('📄 PDF geöffnet');
+      }
+    } catch (err) {
+      alert('Druck/PDF Fehler: ' + (err && err.message ? err.message : String(err)));
     }
   }
 }

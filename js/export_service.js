@@ -132,6 +132,14 @@ export class ExportService {
       }
     }
 
+    const url = URL.createObjectURL(blob);
+    const opened = window.open(url, '_blank');
+    if (opened) {
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return { success: true, method: 'open' };
+    }
+
+    URL.revokeObjectURL(url);
     this.downloadFile(blob, fileName);
     return { success: true, method: 'download' };
   }
