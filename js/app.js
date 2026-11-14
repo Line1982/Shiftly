@@ -532,7 +532,7 @@ class ShiftlyApp {
 
     // Export & Backup Buttons
     const btnPrint = document.getElementById('btnPrintTimesheet');
-    if (btnPrint) btnPrint.addEventListener('click', () => ExportService.printTimesheet());
+    if (btnPrint) btnPrint.addEventListener('click', () => this.handlePrintTimesheet());
 
     const btnExportCsv = document.getElementById('btnExportCsv');
     if (btnExportCsv) btnExportCsv.addEventListener('click', () => this.handleExportCsv());
@@ -1526,15 +1526,14 @@ class ShiftlyApp {
     let rowsHtml = '';
     for (const r of agg.records) {
       const isVac = r.type === 'vacation';
+      const noteText = r.note || (isVac ? 'Urlaub' : '');
       rowsHtml += `
         <tr>
           <td>${r.date}</td>
-          <td>${isVac ? 'Urlaub' : 'Arbeit'}</td>
           <td>${isVac ? '—' : (r.start_time || '—')}</td>
           <td>${isVac ? '—' : (r.end_time || '—')}</td>
-          <td>${isVac ? '—' : (r.break_minutes || 0) + ' Min.'}</td>
           <td style="text-align: right; font-weight: 600;">${TimeEngine.formatHoursPretty(r.net_hours)}</td>
-          <td>${escapeHtml(r.note || '')}</td>
+          <td>${escapeHtml(noteText)}</td>
         </tr>
       `;
     }
@@ -1565,20 +1564,18 @@ class ShiftlyApp {
         <thead>
           <tr>
             <th>Datum</th>
-            <th>Art</th>
             <th>Beginn</th>
             <th>Ende</th>
-            <th>Pause</th>
             <th style="text-align: right;">Stunden</th>
             <th>Notiz</th>
           </tr>
         </thead>
         <tbody>
-          ${rowsHtml || '<tr><td colspan="7" style="text-align:center;">Keine Einträge im Zeitraum.</td></tr>'}
+          ${rowsHtml || '<tr><td colspan="5" style="text-align:center;">Keine Einträge im Zeitraum.</td></tr>'}
         </tbody>
         <tfoot>
           <tr style="font-weight: 700; background: #eee;">
-            <td colspan="5">GESAMTSUMME:</td>
+            <td colspan="3">GESAMTSUMME:</td>
             <td style="text-align: right;">${TimeEngine.formatHoursPretty(agg.totalHours)}</td>
             <td>Saldo: ${agg.periodOvertimeDelta > 0 ? '+' : ''}${TimeEngine.formatHoursPretty(agg.periodOvertimeDelta)}</td>
           </tr>
@@ -1587,15 +1584,6 @@ class ShiftlyApp {
 
       <div style="margin-top: 1.2rem; font-size: 0.85rem; color: #444;">
         Überstunden-Saldo gesamt: <strong>${lifetimeOvertime > 0 ? '+' : ''}${TimeEngine.formatHoursPretty(lifetimeOvertime)}</strong>
-      </div>
-
-      <div class="print-signatures" style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-top: 3.5rem;">
-        <div style="border-top: 1px solid #000; padding-top: 0.5rem; font-size: 0.85rem;">
-          Datum, Unterschrift Arbeitnehmer/in
-        </div>
-        <div style="border-top: 1px solid #000; padding-top: 0.5rem; font-size: 0.85rem;">
-          Datum, Unterschrift Arbeitgeber/in
-        </div>
       </div>
     `;
   }
@@ -1629,6 +1617,19 @@ class ShiftlyApp {
     const agg = TimeEngine.aggregateDateRange(this.records, this.startDate, this.endDate, this.config);
     ExportService.exportDateRangeCsv(agg);
     this.showToast('📊 CSV exportiert');
+  }
+
+  async handlePrintTimesheet() {
+    const agg = TimeEngine.aggregateDateRange(this.records, this.startDate, this.endDate, this.config);
+    const lifetimeOvertime = TimeEngine.calculateLifetimeOvertime(this.records, this.config);
+    const res = await ExportService.printTimesheet({
+      agg,
+      lifetimeOvertime,
+      config: this.config
+    });
+    if (res && res.method === 'download') {
+      this.showToast('📄 PDF heruntergeladen');
+    }
   }
 }
 
